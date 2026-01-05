@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "AI Minimal Translator",
+  "version": "1.0.0",
+  "description": "基于 DeepSeek 的极简网页翻译插件，支持流式输出与沉浸式阅读。",
+  "permissions": [
+    "storage",          
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://api.deepseek.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "AI 极简翻译"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
