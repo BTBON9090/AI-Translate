@@ -222,6 +222,16 @@ class SelectionManager {
 
     this.card = document.createElement('div');
     this.card.className = 'ai-card';
+
+    // 获取当前设置，决定卡片标题显示什么
+    const settings = await chrome.storage.local.get(['targetLang', 'precisionMode', 'provider']);
+    const provider = settings.provider || 'moonshot'; // 默认 Kimi
+    
+    // ★★★ 动态标题：拉齐显示 ★★★
+    let cardTitle = "🌙 Kimi (Moonshot)";
+    if (provider === 'deepseek') cardTitle = "✨ DeepSeek";
+    else if (provider === 'openai') cardTitle = "🤖 OpenAI";
+    else if (provider === 'qwen') cardTitle = "🟣 Qwen";
     
     // 强制注入卡片样式 (Notion 风格)
     Object.assign(this.card.style, {
@@ -263,13 +273,12 @@ class SelectionManager {
     
     document.body.appendChild(this.card);
 
-    // 绑定关闭
-    this.card.querySelector('.ai-card-close').onclick = () => this.card.remove();
+    // 绑定关闭按钮事件
+    this.card.querySelector('.ai-card-close').onclick = () => this.card.remove();// 点击关闭按钮时移除卡片
     this.setupCardDrag(this.card);
 
-    // 开始翻译
-    const result = await chrome.storage.local.get(['targetLang', 'precisionMode']);
-    this.streamTranslate(this.selectionText, result.targetLang || 'zh', result.precisionMode, this.card.querySelector('.ai-card-body'));
+    // 开始翻译 //
+    this.streamTranslate(this.selectionText, settings.targetLang || 'zh', settings.precisionMode, this.card.querySelector('.ai-card-body'));
   }
 
   setupCardDrag(card) {
@@ -371,7 +380,7 @@ class TranslationManager {
   constructor() {
     this.queue = [];
     this.activeCount = 0;
-    this.concurrency = 3;
+    this.concurrency = 2;
     this.settings = {}; 
   }
   addTasks(blocks, settings) {
@@ -447,19 +456,47 @@ class TranslationManager {
   runTask(task) {
     this.activeCount++;
     task.ui.textContent = ''; 
-    task.ui.style.color = ''; // 移除内联 color
+    task.ui.style.color = ''; 
+
     const port = chrome.runtime.connect({ name: "stream-translate" });
+    
+    // 监听断开连接（处理意外断开）
+    port.onDisconnect.addListener(() => {
+      if (chrome.runtime.lastError) {
+        console.warn("Port disconnected:", chrome.runtime.lastError.message);
+      }// 处理断开连接后的逻辑
+      // 遇到断开，也要延迟重试，防止死循环
+      setTimeout(() => {
+        this.activeCount--;
+        this.processQueue();
+      }, 2000); 
+    });
+
     port.postMessage({ action: "TRANSLATE", text: task.text, targetLang: task.targetLang, mode: task.mode });
+    
     port.onMessage.addListener((msg) => {
-      if (msg.action === "CHUNK") task.ui.textContent += msg.content;
+      if (msg.action === "CHUNK") {
+        task.ui.textContent += msg.content;
+      }
       else if (msg.action === "DONE" || msg.error) {
-         if (msg.error) { task.ui.textContent = "[Error]"; task.ui.style.color = 'red'; }
-         port.disconnect();
-         this.activeCount--;
-         this.processQueue();
+         if (msg.error) { 
+           task.ui.textContent = "[Error]"; 
+           task.ui.style.color = 'red'; 
+           console.error("Task Error:", msg.error);
+         }
+         
+         port.disconnect(); // 主动断开
+
+         // ★★★ 核心修改：如果是报错了，延迟 2 秒再继续下一个 ★★★
+         // 这样可以避免一瞬间发出几百个请求导致浏览器封锁
+         const delay = msg.error ? 2000 : 0;
+         
+         setTimeout(() => {
+           this.activeCount--;
+           this.processQueue();
+         }, delay);
       }
     });
-    port.onDisconnect.addListener(() => { this.activeCount--; this.processQueue(); });
   }
 }
 

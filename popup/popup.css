@@ -81,11 +81,11 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 
 /* 还原按钮状态 (绿色) */
 .action-btn.restoring {
-  background: linear-gradient(135deg, #10b981, #059669); /* Green */
+  background: linear-gradient(135deg, #10b981, #059669) !important; /* Green */
   box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
 }
 .action-btn.restoring:hover {
-  background: linear-gradient(135deg, #059669, #047857);
+  background: linear-gradient(135deg, #059669, #047857) !important;
 }
 
 /* Settings Card */
