@@ -407,15 +407,19 @@ class TranslationManager {
         transUi.className = 'ai-trans-replacement';
         transUi.style.display = useMinimalStyle ? 'inline' : 'block';
       } else {
+        // [双语模式]
         if (settings.transStyle === 'highlight' && !useMinimalStyle) {
+           // 情况A: 蓝条色块
            transUi = document.createElement('div');
            transUi.className = 'ai-translate-block'; 
         } else {
+           // 情况B: 极简宋体
            transUi = document.createElement('span');
-           transUi.className = 'ai-trans-minimal';
+           transUi.className = 'ai-trans-minimal'; // 默认应用 CSS 中定义的样式 (含8px左间距)
+           
+           // 如果是块级元素（如段落、标题），强制换行显示在下方
            if (['P','DIV','LI','H1','H2','H3','H4','H5','H6'].includes(tag)) {
-             transUi.style.display = 'block';
-             transUi.style.marginTop = '4px';
+             transUi.classList.add('ai-trans-minimal-block-display'); // 添加这个类来去除左间距并换行
            }
         }
       }
@@ -443,7 +447,7 @@ class TranslationManager {
   runTask(task) {
     this.activeCount++;
     task.ui.textContent = ''; 
-    task.ui.color = ''; // 移除内联 color
+    task.ui.style.color = ''; // 移除内联 color
     const port = chrome.runtime.connect({ name: "stream-translate" });
     port.postMessage({ action: "TRANSLATE", text: task.text, targetLang: task.targetLang, mode: task.mode });
     port.onMessage.addListener((msg) => {
