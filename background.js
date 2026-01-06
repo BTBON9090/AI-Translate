@@ -5,7 +5,7 @@ const BUILTIN_PROXY_URL = "https://translate-deepseek-7dgwa0a2a0e41-1317980685.a
 
 // 默认 API 地址 (改为 Kimi)
 const DEFAULT_API_URL = "https://api.moonshot.cn/v1/chat/completions";
-const DEFAULT_MODEL = "moonshot-v1-8k";
+const DEFAULT_MODEL = "kimi-k2-turbo-preview";
 const DEFAULT_PROVIDER = "moonshot"; // 默认厂商改为 moonshot
 
 chrome.runtime.onConnect.addListener((port) => {
@@ -34,7 +34,7 @@ chrome.runtime.onConnect.addListener((port) => {
           useBuiltIn = true;
           targetApiUrl = BUILTIN_PROXY_URL;
           // 这里的 modelName 即使前端传了 moonshot-v1-8k，云函数那边也会强制覆盖，但保持一致更好
-          modelName = "moonshot-v1-8k"; 
+          modelName = "kimi-k2-turbo-preview"; 
         } else if (provider === 'deepseek' && !apiKey) {
            // 兼容旧逻辑：如果用户非要选 DeepSeek 但没填 Key，也可以走代理（前提是你云函数支持或你想支持）
            // 这里建议：没填 Key 一律走 Kimi 代理
@@ -78,7 +78,7 @@ chrome.runtime.onConnect.addListener((port) => {
         
         // 如果找不到对应的，默认使用 Simplified Chinese
         const langName = langMap[targetLang] || "Simplified Chinese";
-        
+
         if (mode === 'precision') {
           systemPrompt = `You are a professional translator and editor. 
           Translate the following text into ${langName}.
