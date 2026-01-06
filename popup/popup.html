@@ -26,8 +26,13 @@
     <main>
       <!-- 主按钮 -->
       <button id="main-action-btn" class="action-btn">
-        <span class="btn-icon">✨</span>
-        <span class="btn-text">翻译当前页面</span>
+        <!-- <span class="btn-icon">✨</span> -->
+        <!-- 使用 div 包裹主标题和副标题 -->
+        <div class="btn-content-col">
+          <span class="btn-text">翻译当前页面</span>
+          <!-- 问题5：新增副标题用于回显模型名称 -->
+          <span id="btn-model-display" class="btn-subtitle">Model: DeepSeek</span>
+        </div>
       </button>
 
       <!-- 设置卡片 -->
@@ -122,13 +127,59 @@
           <svg class="chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
         <div class="accordion-content hidden" id="api-panel">
-          <div class="input-group">
-            <input type="password" id="api-key" placeholder="sk-..." autocomplete="off">
-            <div class="eye-btn" id="toggle-visibility">
-               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          
+          <!-- 模型服务商 -->
+          <div class="setting-item stacked" style="border:none; padding-bottom:0;">
+            <label id="lbl-provider">模型服务商</label>
+            <select id="provider-select" class="modern-select full-width-select">
+              <!-- options 保持不变 -->
+              <option value="deepseek">DeepSeek (默认)</option>
+              <option value="openai">OpenAI (ChatGPT)</option>
+              <option value="moonshot">Kimi (Moonshot)</option>
+              <option value="qwen">阿里通义 (Qwen)</option>
+              <option value="custom">自定义 (Custom)</option>
+            </select>
+          </div>
+
+          <!-- 自定义参数区 -->
+          <div id="custom-options" class="hidden" style="margin-top:10px; margin-bottom:12px; background:#f8fafc; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+            <div style="margin-bottom:8px;">
+              <label style="font-size:11px; color:#64748b;">API URL</label>
+              <div class="input-wrapper">
+                <input type="text" id="custom-api-url" placeholder="https://...">
+                <div class="icon-group">
+                  <!-- 加上 icon-btn 类 -->
+                  <div class="icon-btn clear-btn" data-target="custom-api-url">✕</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:11px; color:#64748b;">Model Name</label>
+              <div class="input-wrapper">
+                <input type="text" id="custom-model-name" placeholder="e.g. gpt-4">
+                <div class="icon-group">
+                  <!-- 加上 icon-btn 类 -->
+                  <div class="icon-btn clear-btn" data-target="custom-model-name">✕</div>
+                </div>
+              </div>
             </div>
           </div>
-          <!-- 修改 2：建议补回提示语，并加上 id -->
+
+          <!-- API Key 输入框 (确保结构完全一致) -->
+          <div class="input-group" style="margin-top:10px; margin-bottom: 8px;">
+            <div class="input-wrapper">
+              <input type="password" id="api-key" placeholder="sk-..." autocomplete="off">
+              <div class="icon-group">
+                <!-- 加上 icon-btn 类，使用 ✕ 符号比 X 更像图标 -->
+                <div class="icon-btn clear-btn" data-target="api-key">✕</div>
+                <!-- 加上 icon-btn 和 eye-btn 类 -->
+                <div class="icon-btn eye-btn" id="toggle-visibility">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          
           <div class="api-tips" id="lbl-api-tips">Key 仅保存在本地，不会上传。</div>
           <button id="save-key-btn" class="save-btn">保存配置</button>
         </div>

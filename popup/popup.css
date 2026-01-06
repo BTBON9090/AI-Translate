@@ -64,6 +64,18 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
   transition: transform 0.1s, box-shadow 0.1s;
   margin-bottom: 16px;
+  flex-direction: row; 
+  text-align: left;
+}
+.btn-content-col {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.btn-subtitle {
+  font-size: 10px;
+  opacity: 0.8;
+  font-weight: 400;
 }
 .action-btn:active { transform: scale(0.98); box-shadow: none; }
 
@@ -97,6 +109,17 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .setting-item label { font-size: 13px; font-weight: 500; color: var(--text-main); }
 .sub-setting { padding-left: 10px; border-left: 2px solid #e2e8f0; display: none; }
 .sub-setting.visible { display: flex; }
+/* --- 1. 解决模型服务商拥挤问题 --- */
+/* 给设置项增加一个垂直堆叠的修饰类 */
+.setting-item.stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.setting-item.stacked .full-width-select {
+  width: 100%; /* 下拉框占满一行 */
+  margin-left: 0;
+}
 
 .modern-select {
   padding: 6px 24px 6px 10px;
@@ -129,8 +152,87 @@ input:checked + .slider:before { transform: translateX(16px); }
 .accordion-content { background: white; margin-top: 8px; padding: 12px; border-radius: var(--radius); border: 1px solid var(--border); }
 .accordion-content.hidden { display: none; }
 
+/* --- 修复输入框与图标 --- */
+
+/* 1. 容器：给图标留出足够空间 */
+.input-wrapper {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input-wrapper input {
+  width: 100%;
+  height: 36px;
+  padding: 8px 10px;
+  padding-right: 40px; /* 右边留白，防止文字被图标遮挡 */
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  color: #334155;
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.input-wrapper input:focus {
+  border-color: #2563eb;
+  outline: none;
+}
+
+/* 2. 图标组容器：核心布局 */
+.icon-group {
+  position: absolute;
+  right: 10px;       /* 整体靠右 10px */
+  top: 0;
+  height: 100%;      /* 高度撑满 */
+  display: flex;     /* 启用 Flex 布局 */
+  align-items: center; /* 垂直居中 */
+  gap: 2px;          /* 图标之间的间距 */
+  z-index: 5;
+  pointer-events: none; /* 让点击穿透空白区域，只在按钮上响应 */
+}
+
+/* 3. 图标按钮通用样式 */
+.icon-btn {
+  /* 关键修复：强制取消绝对定位，让它们听 Flex 的指挥 */
+  position: static !important; 
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  pointer-events: auto; /* 恢复点击响应 */
+  color: #94a3b8;
+  font-size: 14px;
+  user-select: none;
+}
+
+.icon-btn:hover {
+  background-color: #f1f5f9;
+  color: #ef4444;
+}
+
+/* 4. 眼睛图标特例 */
+.eye-btn {
+  /* 确保眼睛图标没有旧的 right/top 干扰 */
+  margin: 0;
+}
+.eye-btn:hover {
+  color: #334155; /* 眼睛悬停不变红 */
+}
+
+/* 5. 清除按钮显隐 */
+.clear-btn { display: none; }
+.clear-btn.visible { display: flex; }
+
+
 .input-group { position: relative; margin-bottom: 10px; }
 .input-group input { width: 100%; padding: 10px 36px 10px 10px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; font-size: 12px; }
-.eye-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-sub); display: flex; }
+
 .save-btn { width: 100%; padding: 8px; background: #f1f5f9; color: var(--text-main); border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .save-btn:hover { background: #e2e8f0; }

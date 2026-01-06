@@ -1,6 +1,4 @@
-// DeepSeek API 配置
-const API_URL = "https://api.deepseek.com/chat/completions";
-const MODEL_NAME = "deepseek-chat";
+
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "stream-translate") return;
@@ -10,16 +8,19 @@ chrome.runtime.onConnect.addListener((port) => {
       const { text, targetLang, mode } = msg; // 接收 mode 参数
       
       try {
-        const result = await chrome.storage.local.get(['apiKey']);
-        const apiKey = result.apiKey;
+        const settings = await chrome.storage.local.get(['apiKey', 'apiUrl', 'modelName']);
+        const apiKey = settings.apiKey;
+        const apiUrl = settings.apiUrl || "https://api.deepseek.com/chat/completions";
+        const modelName = settings.modelName || "deepseek-chat";
 
         if (!apiKey) {
-          port.postMessage({ error: "未配置 API Key" });
+          port.postMessage({ error: "请在插件设置中配置 API Key" });
           return;
         }
 
         // --- 核心：提示词工程 (Prompt Engineering) ---
         let systemPrompt;
+        // --- 核心：根据 mode 选择不同的提示词 ---
         const langName = targetLang === 'en' ? 'English' : targetLang === 'ja' ? 'Japanese' : 'Simplified Chinese';
 
         if (mode === 'precision') {
@@ -36,14 +37,16 @@ chrome.runtime.onConnect.addListener((port) => {
           systemPrompt = `Translate into ${langName}. Keep it concise and literal. Output only the translation.`;
         }
 
-        const response = await fetch(API_URL, {
+        // --- 发送请求 ---
+        // 注意：大多数模型（Kimi, Qwen, DeepSeek, OpenAI）都支持这个标准的 fetch 格式
+        const response = await fetch(apiUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            model: MODEL_NAME,
+            model: modelName,// 模型名称
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: text }
@@ -55,7 +58,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
         if (!response.ok) {
             const err = await response.json().catch(()=>({}));
-            throw new Error(err.error?.message || response.statusText);
+            throw new Error(err.error?.message || err.message || response.statusText);
         }
 
         const reader = response.body.getReader();
