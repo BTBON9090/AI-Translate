@@ -79,16 +79,28 @@ chrome.runtime.onConnect.addListener((port) => {
         // 如果找不到对应的，默认使用 Simplified Chinese
         const langName = langMap[targetLang] || "Simplified Chinese";
 
+        // 核心优化 1: 使用示例 (Few-Shot) 代替冗长的说明
+        // AI 模仿示例的能力远强于阅读复杂的规则说明
+        const oneShotExample = `Example Input: Hello world ||| 123 ||| Code: JS
+Example Output: 你好世界 ||| 123 ||| 代码：JS`;
+
         if (mode === 'precision') {
-          systemPrompt = `You are a professional translator and editor. 
-          Translate the following text into ${langName}.
-          Guidelines:
-          1. Analyze the context and tone. Ensure the translation is natural and fluent.
-          2. Use appropriate terminology for the subject matter.
-          3. Rephrase if necessary to make it sound like a native speaker wrote it.
-          4. Output ONLY the translated text, no explanations.`;
+          systemPrompt = `Translate the text to ${langName}.
+Critical Rules:
+1. STRUCTURE: The number of "|||" separators MUST match the input.
+2. CONTENT: Translate text naturally. 
+3. EXCEPTION: Do NOT translate pure numbers, codes, or formulas—copy them as is. Do NOT skip them.
+
+${oneShotExample}`;
         } else {
-          systemPrompt = `Translate into ${langName}. Keep it concise and literal. Output only the translation.`;
+          // 极速模式
+          systemPrompt = `Translate to ${langName}.
+Rules:
+1. Keep "|||" separators exactly as is.
+2. If a segment is a number/symbol, copy it. Do NOT skip anything.
+3. Be concise.
+
+${oneShotExample}`;
         }
 
         // === 修正 3：构建请求头 ===
@@ -112,7 +124,12 @@ chrome.runtime.onConnect.addListener((port) => {
               { role: "user", content: text }
             ],
             stream: true,
-            temperature: mode === 'precision' ? 1.3 : 1.0 
+
+            // 核心优化 2: 调整温度
+            // 极速模式(0.3)更稳，精翻模式(0.7)更顺滑。原先的 1.3 太高了容易导致乱码或超时
+            temperature: mode === 'precision' ? 0.7 : 0.3, 
+            // 核心优化 3: 惩罚重复，防止 AI 卡住复读
+            frequency_penalty: 0.2
           })
         });
 

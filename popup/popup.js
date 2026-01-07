@@ -57,10 +57,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // 厂商预设
+  // 厂商预设 (已更新 DeepSeek V3)
   const PROVIDERS = {
     moonshot: { url: "https://api.moonshot.cn/v1/chat/completions", model: "kimi-k2-turbo-preview" },
-    deepseek: { url: "https://api.deepseek.com/chat/completions", model: "deepseek-chat" },
+    deepseek: { url: "https://api.deepseek.com/chat/completions", model: "deepseek-chat" }, // V3 模型
     openai:   { url: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini" },
     qwen:     { url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen-turbo" },
     custom:   { url: "", model: "" }
@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     mainBtn: document.getElementById('main-action-btn'),
     btnText: document.querySelector('#main-action-btn .btn-text'),
     btnIcon: document.querySelector('#main-action-btn .btn-icon'),
-    btnSubtitle: document.getElementById('btn-model-display'), // 如果 HTML 里没有这个 ID，可能是 null
+    btnSubtitle: document.getElementById('btn-model-display'), 
 
     customUrl: document.getElementById('custom-api-url'),
     customModel: document.getElementById('custom-model-name'),
@@ -156,9 +156,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // === 修复版：主按钮 UI 更新函数 (容错增强) ===
+  // 主按钮 UI 更新函数
   function updateMainButtonUI(isTranslating) {
-    // 1. 只要主按钮还在，就继续执行，不要因为缺图标就罢工
     if (!els.mainBtn) return;
 
     const lang = currentUiLang || 'zh'; 
@@ -167,16 +166,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isTranslating) {
       // 切换为 [还原状态] (绿色)
       els.mainBtn.classList.add('restoring');
-      
-      // 如果有文字元素，才更新文字
       if (els.btnText) els.btnText.textContent = t.btnRestore;
-      // 如果有图标元素，才更新图标
       if (els.btnIcon) els.btnIcon.textContent = '↩️';
-      
     } else {
       // 切换为 [翻译状态] (蓝色)
       els.mainBtn.classList.remove('restoring');
-      
       if (els.btnText) els.btnText.textContent = t.btnTrans;
       if (els.btnIcon) els.btnIcon.textContent = '✨';
     }
@@ -184,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 更新按钮下方的模型显示
   function updateModelSubtitle(savedModelName, provider) {
-    if (!els.btnSubtitle) return; // 如果 HTML 里没这个元素，直接跳过，防止报错
+    if (!els.btnSubtitle) return; 
     
     const t = i18n[currentUiLang] || i18n['zh'];
     let displayModel = savedModelName;
@@ -266,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 7. 检查当前页面是否正在翻译中 (Sync State)
             chrome.tabs.sendMessage(tab.id, { action: "GET_STATE" }, (response) => {
-              if (chrome.runtime.lastError) return; // 忽略错误
+              if (chrome.runtime.lastError) return; 
               if (response && response.isTranslating) {
                 updateMainButtonUI(true);
               }
@@ -287,10 +281,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // 5. 事件监听绑定
   // ==========================================
 
-  // 主按钮点击 (修复版)
+  // 主按钮点击
   if (els.mainBtn) {
     els.mainBtn.addEventListener('click', async () => {
-      console.log("Button Clicked!"); // 调试日志
+      console.log("Button Clicked!"); 
       // 获取当前状态 (UI为准)
       const isCurrentlyRestoring = els.mainBtn.classList.contains('restoring');
       const targetState = !isCurrentlyRestoring;
