@@ -434,7 +434,7 @@ function scanTranslatableElements() {
       const parent = node.parentElement;
       const tag = parent.tagName;
       // 3. 排除代码块、脚本样式等
-      if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'TEXTAREA'].includes(tag)) return NodeFilter.FILTER_REJECT;
+      if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'TEXTAREA', 'AUDIO', 'VIDEO', 'CANVAS'].includes(tag)) return NodeFilter.FILTER_REJECT;
 
       // 4. 新增：如果父元素已经有翻译标记，或者已经是翻译相关的类，坚决跳过
       if (parent.getAttribute(TRANSLATION_MARK_ATTR)) return NodeFilter.FILTER_REJECT;
@@ -458,19 +458,30 @@ function scanTranslatableElements() {
     if (textNodes.length > 500) return; 
     const fullText = textNodes.map(n => n.nodeValue).join('').trim();
     
-    // --- 加强垃圾内容过滤 ---
-    // 1. 长度太短的跳过
-    if (fullText.length < 2) return;
+    // --- 【加强版过滤逻辑】 ---
+
+    // 1. 长度太短的跳过 (小于2个字符通常是无意义的，除非是中文)
+    if (fullText.length < 2 && !/[\u4e00-\u9fa5]/.test(fullText)) return;
     
-    // 2. 纯符号/纯数字/单位组合 -> 跳过
+    // 2. 纯数字/符号/单位 (保留原有逻辑)
     if (/^[\d\s.,!?@#$%^&*()_{}\[\]\-+=|\\/<>:;"'`~a-zA-Z]{1,8}$/.test(fullText)) {
        if (/^[\d\s\W_a-zA-Z]+$/.test(fullText)) {
          if (/\d/.test(fullText)) return;
        }
     }
-
-    // 3. 纯符号判断
     if (/^[\d\s.,!?@#$%^&*()_{}\[\]\-+=|\\/<>:;"'`~]+$/.test(fullText)) return;
+
+    // 3. 【新增】排除纯日期格式 (如 2023-10-01, 10/01/2023, 2023年10月)
+    if (/^\d{2,4}[-\/年]\d{1,2}[-\/月]\d{1,2}[日]?(\s\d{1,2}:\d{2})?$/.test(fullText)) return;
+    
+    // 4. 【新增】排除邮箱和网址
+    if (/^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$/.test(fullText)) return; // 邮箱
+    if (/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(fullText)) return; // 网址
+
+    // 5. 【新增】排除看起来像代码变量名的 (驼峰或下划线，且没有空格)
+    // 例如: userProfile, get_data_from_server (通常不需要翻译)
+    if (/^[a-z]+[A-Z][a-zA-Z0-9]*$/.test(fullText) && fullText.length < 30) return;
+    if (/^[a-z]+_[a-z0-9_]+$/.test(fullText) && fullText.length < 30) return;
 
     blocks.push({ container: container, textNodes: textNodes, originalText: fullText });
   });
