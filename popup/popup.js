@@ -133,9 +133,86 @@ document.addEventListener('DOMContentLoaded', () => {
     bubbleCheck: document.getElementById('show-bubble'),
     
     optMinimal: document.querySelector('#trans-style option[value="minimal"]'),
-    optHighlight: document.querySelector('#trans-style option[value="highlight"]')
+    optHighlight: document.querySelector('#trans-style option[value="highlight"]'),
+
+    statusLabel: document.getElementById('membership-status'),
+    trialBar: document.getElementById('trial-progress-bar'),
+    trialFill: document.getElementById('trial-progress-fill'),
+    activationArea: document.getElementById('activation-area'),
+    activeInfo: document.getElementById('active-info'),
+    expireDateLabel: document.getElementById('expire-date'),
+    licenseInput: document.getElementById('license-key-input'),
+    activateBtn: document.getElementById('btn-activate')
+    
   };
 
+  // 2. 初始化逻辑 (放在 init 或 DOMContentLoaded 里)
+  chrome.storage.local.get(['installTimestamp', 'licenseKey', 'licenseExpire'], (res) => {
+    const now = Date.now();
+    
+    // A. 首次安装时间锚点 (如果用户删了插件重装，这个会被重置，这是纯前端防不住的，但对MVP够了)
+    let installTime = res.installTimestamp;
+    if (!installTime) {
+      installTime = now;
+      chrome.storage.local.set({ installTimestamp: installTime });
+    }
+
+    // B. 计算试用期 (30天)
+    const TRIAL_DAYS = 30;
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysUsed = (now - installTime) / msPerDay;
+    const daysLeft = Math.ceil(TRIAL_DAYS - daysUsed);
+    
+    // C. 检查是否已激活 VIP
+    const hasLicense = !!res.licenseKey;
+    
+    if (hasLicense) {
+      // === 状态：付费会员 ===
+      els.statusLabel.textContent = "尊贵会员 ✨";
+      els.statusLabel.style.color = "#ea580c"; // 橙色
+      els.trialBar.classList.add('hidden'); // 隐藏进度条
+      els.activationArea.classList.add('hidden'); // 隐藏输入框
+      els.activeInfo.classList.remove('hidden'); // 显示有效期
+      // 显示到期时间 (如果云端返回了时间)
+      if (res.licenseExpire) {
+        els.expireDateLabel.textContent = new Date(res.licenseExpire).toLocaleDateString();
+      }
+    } else {
+      // === 状态：试用或过期 ===
+      if (daysLeft > 0) {
+        // 试用中
+        els.statusLabel.textContent = `试用期剩余 ${daysLeft} 天`;
+        els.statusLabel.style.color = "#16a34a"; // 绿色
+        // 更新进度条
+        const percentage = (daysUsed / TRIAL_DAYS) * 100;
+        if (els.trialFill) els.trialFill.style.width = `${Math.min(100, percentage)}%`;
+      } else {
+        // 已过期
+        els.statusLabel.textContent = "试用已结束";
+        els.statusLabel.style.color = "#dc2626"; // 红色
+        if (els.trialFill) els.trialFill.style.width = "100%";
+        if (els.trialFill) els.trialFill.style.background = "#dc2626";
+      }
+    }
+  });
+
+  // 3. 激活按钮点击事件
+  if (els.activateBtn) {
+    els.activateBtn.addEventListener('click', () => {
+      const key = els.licenseInput.value.trim();
+      if (!key) return;
+      
+      // 保存到本地，云端去验证
+      chrome.storage.local.set({ licenseKey: key }, () => {
+        // 视觉反馈
+        els.activateBtn.textContent = "验证中...";
+        setTimeout(() => {
+          alert("激活码已保存！请尝试翻译，系统将自动验证有效性。");
+          window.location.reload();
+        }, 800);
+      });
+    });
+  }
   let currentDomain = '';
   let currentUiLang = 'zh';
 

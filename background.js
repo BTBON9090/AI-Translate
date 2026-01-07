@@ -46,8 +46,14 @@ chrome.runtime.onConnect.addListener((port) => {
       }
 
       try {
-        const settings = await chrome.storage.local.get(['apiKey', 'apiUrl', 'modelName', 'provider']);
+        const settings = await chrome.storage.local.get([
+          'apiKey', 'apiUrl', 'modelName', 'provider',
+          'licenseKey', 'installTimestamp'
+        ]);
         
+        // 确保有 installTimestamp (防止意外)
+        const installTime = settings.installTimestamp || Date.now();
+
         const apiKey = settings.apiKey;
         
         // 【解决问题 3】默认厂商改为 "builtin_glm" (速度快，体验好)
@@ -175,6 +181,9 @@ ${batchExample}`;
           method: "POST", headers: headers,
           body: JSON.stringify({
             model: modelName, traceId: traceId,
+            // 【解决问题 4】增加激活码校验
+            licenseKey: settings.licenseKey || '',
+            installTimestamp: installTime,// 告诉云端我是什么时候装的
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: text }

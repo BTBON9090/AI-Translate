@@ -140,6 +140,9 @@
         </div>
       </div>
 
+      <div class="beta-notice" style="text-align:center; font-size:12px; color:#94a3b8; margin-top:15px; padding-bottom:10px;">
+        Beta 版本期间，所有内置高级模型均免费开放 💖
+      </div>
       <!-- API 配置折叠区 -->
       <div class="api-section">
         <div class="accordion-header" id="toggle-api">
@@ -220,9 +223,49 @@
           <button id="save-key-btn" class="save-btn">保存配置</button>
         </div>
       </div>
-      <div class="beta-notice" style="text-align:center; font-size:10px; color:#94a3b8; margin-top:15px; padding-bottom:10px;">
-        Beta 版本期间，所有内置高级模型均免费开放 💖
+      
+      <!-- popup/popup.html -> 放在 </main> 之前 -->
+
+      <!-- 会员/激活卡片 -->
+      <div class="activation-card" style="margin-top:15px; background:#f8fafc; padding:15px; border-radius:10px; border:1px solid #e2e8f0;">
+        <!-- 头部：状态显示 -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-weight:600; color:#334155; font-size:13px;">💎 会员状态</span>
+          <span id="membership-status" style="font-size:12px; font-weight:bold; color:#16a34a;">检测中...</span>
+        </div>
+
+        <!-- 进度条 (仅试用期显示) -->
+        <div id="trial-progress-bar" style="width:100%; height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden; margin-bottom:10px;">
+          <div id="trial-progress-fill" style="width:100%; height:100%; background:#3b82f6;"></div>
+        </div>
+
+        <!-- 激活输入区域 -->
+        <div id="activation-area">
+          <div style="font-size:11px; color:#64748b; margin-bottom:8px; line-height:1.4;">
+            内置高级通道 (DeepSeek/GLM) 订阅仅需 ¥19.9/月。<br>
+            <a href="https://btbon9090.github.io/ai-translator-pay/" target="_blank" style="color:#3b82f6; text-decoration:underline; font-weight:600;">
+              👉 点击获取激活码
+            </a>
+            ←←家里孩子就想喝杯奶茶🧋
+          </div>
+          
+          <div class="input-wrapper" style="display:flex; gap:5px;">
+            <input type="text" id="license-key-input" placeholder="输入 M- 开头的激活码" 
+                  style="flex:1; padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px;">
+            <button id="btn-activate" style="
+              background:#3b82f6; color:white; border:none; border-radius:6px; 
+              padding:0 12px; font-size:12px; cursor:pointer; font-weight:500;">
+              激活
+            </button>
+          </div>
+        </div>
+        
+        <!-- 已激活状态下显示的信息 (默认隐藏) -->
+        <div id="active-info" class="hidden" style="font-size:11px; color:#64748b; margin-top:5px;">
+          有效期至：<span id="expire-date">--</span>
+        </div>
       </div>
+      
     </main>
   </div>
   <script src="popup.js"></script>
