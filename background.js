@@ -31,7 +31,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
   port.onMessage.addListener(async (msg) => {
     if (msg.action === "TRANSLATE") {
-      const { text, targetLang, mode } = msg;
+      const { text, targetLang, mode, traceId } = msg;
       
       // --- 1. 缓存命中检查 (只针对短文本 & 极速模式) ---
       // 精翻模式通常需要上下文，所以不走缓存或者谨慎走
@@ -174,7 +174,7 @@ ${batchExample}`;
         const response = await fetch(targetApiUrl, {
           method: "POST", headers: headers,
           body: JSON.stringify({
-            model: modelName,
+            model: modelName, traceId: traceId,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: text }

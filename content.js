@@ -499,7 +499,7 @@ class TranslationManager {
   }
 
   // 添加任务（包含 UI 生成、打包、入队）
-  addTasks(blocks, settings, isPriority = false) {
+  addTasks(blocks, settings, isPriority = false, traceId = null) {
     this.settings = settings;
     // 只有非优先任务才显示加载圈
     if (!isPriority) setBubbleLoading(true); 
@@ -553,6 +553,7 @@ class TranslationManager {
       block.container.appendChild(transUi);
       block.container.setAttribute(TRANSLATION_MARK_ATTR, 'true');
 
+      // 3. 加入原始任务队列
       rawTasks.push({ 
         text: block.originalText, 
         ui: transUi, 
@@ -575,7 +576,7 @@ class TranslationManager {
       }
 
       if (currentBatchLen + task.text.length > BATCH_SIZE_LIMIT || currentBatch.length >= BATCH_COUNT_LIMIT) {
-        this.pushBatchTask(currentBatch, isPriority);
+        this.pushBatchTask(currentBatch, isPriority, traceId);
         currentBatch = [];
         currentBatchLen = 0;
       }
@@ -585,14 +586,14 @@ class TranslationManager {
     });
 
     if (currentBatch.length > 0) {
-      this.pushBatchTask(currentBatch, isPriority);
+      this.pushBatchTask(currentBatch, isPriority, traceId);
     }
 
     this.processQueue();
   }
 
   // 辅助：打包入队
-  pushBatchTask(batchItems, isPriority) {
+  pushBatchTask(batchItems, isPriority, traceId) {
     if (!batchItems || batchItems.length === 0) return;
     
     let taskItem;
@@ -608,6 +609,9 @@ class TranslationManager {
         mode: 'fast' 
       };
     }
+
+    // ★★★ 关键：把身份证贴在任务上 ★★★
+    taskItem.traceId = traceId; 
 
     if (isPriority) {
       this.queue.unshift(taskItem);
@@ -642,6 +646,7 @@ class TranslationManager {
       return;
     }
 
+    
     this.activeCount++;
     
     // UI 初始化
@@ -663,7 +668,8 @@ class TranslationManager {
       }, 1000); 
     });
 
-    port.postMessage({ action: "TRANSLATE", text: task.text, targetLang: task.targetLang, mode: task.mode });
+    // ★★★ 关键：把身份证带在请求上 ★★★
+    port.postMessage({ action: "TRANSLATE", text: task.text, targetLang: task.targetLang, mode: task.mode, traceId: task.traceId });
     
     port.onMessage.addListener((msg) => {
       if (msg.action === "CHUNK") {
@@ -743,9 +749,13 @@ async function enablePageTranslation() {
   isTranslating = true; 
   updateBubbleState(true);
   
+  // ★★★ 新增：生成本次翻译的唯一身份证 (Trace ID) ★★★
+  const traceId = crypto.randomUUID(); 
+  console.log(`[AI翻译] 启动新任务，TraceID: ${traceId}`);
+
   // 获取设置
   const settings = await chrome.storage.local.get(['targetLang', 'bilingualMode', 'transStyle', 'precisionMode']);
-  const lang = settings.targetLang || 'zh';
+  const lang = settings.targetLang || 'zh';// 默认中文
   
   // 1. 扫描所有文本块
   let blocks = scanTranslatableElements();
@@ -769,6 +779,7 @@ async function enablePageTranslation() {
     return rectA.top - rectB.top;
   });
 
+  // 2. 加入队列
   pageManager.addTasks(blocks, {
     targetLang: lang,
     bilingualMode: settings.bilingualMode !== false,

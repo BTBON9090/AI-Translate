@@ -117,6 +117,27 @@
             <span class="slider"></span>
           </label>
         </div>
+
+        <div class="setting-item" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
+          <label style="color:#64748b; font-size:12px;">觉得好用？</label>
+          <a href="https://你的Chrome商店详情页链接" target="_blank" style="text-decoration:none;">
+            <button style="
+              background: #f1f5f9; 
+              color: #334155; 
+              border: 1px solid #cbd5e1; 
+              padding: 6px 12px; 
+              border-radius: 6px; 
+              font-size: 12px; 
+              cursor: pointer; 
+              display: flex; 
+              align-items: center; 
+              gap: 5px;
+              transition: all 0.2s;
+            " onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+              <span>⭐️</span> 给个好评
+            </button>
+          </a>
+        </div>
       </div>
 
       <!-- API 配置折叠区 -->
@@ -134,10 +155,10 @@
             <!-- 修改后的 provider-select -->
             <select id="provider-select" class="modern-select full-width-select">
               <!-- 组 1：内置免费线路 -->
-              <optgroup label="✨ 免费内置线路 (无需 Key)">
-                <option value="builtin_glm">⚡️ 内置 GLM-4 Flash (极速)</option>
-                <option value="builtin_deepseek">🚀 内置 DeepSeek V3 (推荐)</option>
-                <option value="builtin_kimi">🌙 内置 Kimi (稳定)</option>
+              <optgroup label="🎁 免费内置线路 (Beta福利)">
+                <option value="builtin_glm">⚡️ GLM-4 Flash-永久免费</option>
+                <option value="builtin_deepseek">🚀 DeepSeek V3-限时免费</option>
+                <option value="builtin_kimi">🌙 Kimi-限时免费</option>
               </optgroup>
 
               <!-- 组 2：自定义/官方线路 -->
@@ -198,6 +219,9 @@
           <div class="api-tips" id="lbl-api-tips">Key 仅保存在本地，不会上传。</div>
           <button id="save-key-btn" class="save-btn">保存配置</button>
         </div>
+      </div>
+      <div class="beta-notice" style="text-align:center; font-size:10px; color:#94a3b8; margin-top:15px; padding-bottom:10px;">
+        Beta 版本期间，所有内置高级模型均免费开放 💖
       </div>
     </main>
   </div>
