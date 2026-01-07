@@ -291,12 +291,28 @@ class SelectionManager {
     this.card.className = 'ai-card';
 
     const settings = await chrome.storage.local.get(['targetLang', 'precisionMode', 'provider']);
-    const provider = settings.provider || 'moonshot'; 
+    const provider = settings.provider || 'builtin_glm'; 
     
-    let cardTitle = "🌙 Kimi (Moonshot)";
-    if (provider === 'deepseek') cardTitle = "✨ DeepSeek";
-    else if (provider === 'openai') cardTitle = "🤖 OpenAI";
-    else if (provider === 'qwen') cardTitle = "🟣 Qwen";
+    const titleMap = {
+        'deepseek': "✨ DeepSeek",
+        'openai': "🤖 OpenAI",
+        'qwen': "🟣 Qwen",
+        'siliconflow': "🚀 SiliconFlow",
+        'zhipu': "🎓 GLM-4",
+        'groq': "⚡️ Llama 3 (Groq)",
+        'openrouter': "🌐 OpenRouter",
+        'ollama': "🏠 Local Ollama",
+        // 新增内置线路映射
+        'builtin_deepseek': "🚀 DeepSeek (Built-in)",
+        'builtin_glm': "⚡️ GLM-4 (Built-in)",
+        'builtin_kimi': "🌙 Kimi (Built-in)",
+        'custom': "⚙️ Custom Model"
+    };
+    let cardTitle = titleMap[provider] || "AI Translator";
+
+    if (titleMap[provider]) {
+        cardTitle = titleMap[provider];
+    }
     
     Object.assign(this.card.style, {
       position: 'absolute',

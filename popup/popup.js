@@ -57,12 +57,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // 厂商预设 (已更新 DeepSeek V3)
+  // 厂商预设
   const PROVIDERS = {
+    // === 内置线路 (Key 填在云函数里，前端无需填) ===
+    // 注意：这里的 model 必须和云函数 index.js 里判断的字符串一致
+    builtin_deepseek: { 
+      url: "", // 内置模式不需要在这里填 URL，background.js 会处理
+      model: "deepseek-ai/DeepSeek-V3" 
+    },
+    builtin_glm: { 
+      url: "", 
+      model: "glm-4-flash" 
+    },
+    builtin_kimi: { 
+      url: "", 
+      model: "kimi-k2-turbo-preview" 
+    },
+
+    // === 官方线路 (需要用户填 Key) ===
     moonshot: { url: "https://api.moonshot.cn/v1/chat/completions", model: "kimi-k2-turbo-preview" },
-    deepseek: { url: "https://api.deepseek.com/chat/completions", model: "deepseek-chat" }, // V3 模型
+    deepseek: { url: "https://api.deepseek.com/chat/completions", model: "deepseek-chat" },
     openai:   { url: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini" },
     qwen:     { url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen-turbo" },
+    siliconflow: { url: "https://api.siliconflow.cn/v1/chat/completions", model: "deepseek-ai/DeepSeek-V3" },
+    zhipu:    { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "glm-4-flash" },
+    groq:     { url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile" },
+    openrouter:{ url: "https://openrouter.ai/api/v1/chat/completions", model: "google/gemini-2.0-flash-exp:free" },
+    ollama:   { url: "http://localhost:11434/v1/chat/completions", model: "llama3" },
     custom:   { url: "", model: "" }
   };
 
@@ -216,37 +237,53 @@ document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.local.get(
     ['apiKey', 'provider', 'apiUrl', 'modelName', 'targetLang', 'bilingualMode', 'transStyle', 'precisionMode', 'showBubble', 'autoSites', 'uiLang'], 
     (res) => {
-      // 1. 填充 API 设置
-      if (els.apiKey && res.apiKey) els.apiKey.value = res.apiKey;
-      else if (els.apiPanel) els.apiPanel.classList.remove('hidden'); // 没 Key 默认展开面板
-
-      const currentProvider = res.provider || 'moonshot'; // 默认 Kimi
-      if (els.providerSelect) els.providerSelect.value = currentProvider;
+      // --- A. 处理服务商与面板状态 ---
+      // 1. 获取当前厂商，如果没存过，默认为 'builtin_glm'
+      const currentProvider = res.provider || 'builtin_glm'; 
       
-      const config = PROVIDERS[currentProvider];
+      // 2. 回显下拉菜单选中项
+      if (els.providerSelect) {
+        els.providerSelect.value = currentProvider;
+      }
+
+      // 3. 智能展开面板逻辑：只有当 "不是内置" 且 "没有Key" 时，才自动展开提醒用户填 Key
+      // (原来的逻辑是只要没 Key 就展开，导致内置模式也会展开，很烦人)
+      if (els.apiKey) els.apiKey.value = res.apiKey || '';
+      
+      const isBuiltin = currentProvider.startsWith('builtin_');
+      if (!isBuiltin && !res.apiKey && els.apiPanel) {
+         els.apiPanel.classList.remove('hidden'); // 展开面板
+         if(els.toggleApi) els.toggleApi.classList.add('active'); // 箭头旋转
+      }
+
+      // 4. 关键：手动触发一次 change 事件
+      // 作用：让下方的监听器工作，自动禁用 Key 输入框、更新提示语
+      if (els.providerSelect) {
+        els.providerSelect.dispatchEvent(new Event('change'));
+      }
+
+      // --- B. 填充自定义 URL 和 模型名 ---
+      // (即使是内置模式，这里 config 也会取到默认值，没关系，UI会自动隐藏)
+      const config = PROVIDERS[currentProvider] || PROVIDERS['builtin_glm'];
       if (els.customUrl) els.customUrl.value = res.apiUrl || (config ? config.url : '');
       if (els.customModel) els.customModel.value = res.modelName || (config ? config.model : '');
       
-      toggleCustomInputs(currentProvider);
-
-      // 2. 填充常规设置
+      // --- C. 填充常规设置 (保持不变) ---
       if (els.targetLang && res.targetLang) els.targetLang.value = res.targetLang;
       if (els.bilingualMode) els.bilingualMode.checked = res.bilingualMode !== false;
       if (els.transStyle) els.transStyle.value = res.transStyle || 'minimal';
       if (els.precisionMode) els.precisionMode.checked = res.precisionMode === true;
       if (els.bubbleCheck) els.bubbleCheck.checked = res.showBubble !== false;
       
-      // 3. 界面语言
+      // --- D. 界面语言与样式 ---
       const savedLang = res.uiLang || 'zh';
       updateUILanguage(savedLang);
-      
-      // 4. 双语样式行显示
       toggleStyleRow(els.bilingualMode.checked);
 
-      // 5. 模型副标题
+      // --- E. 模型副标题 ---
       updateModelSubtitle(res.modelName, currentProvider);
 
-      // 6. 自动翻译开关状态
+      // --- F. 自动翻译开关状态 (保持不变) ---
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tab = tabs[0];
         if (tab && tab.url) {
@@ -258,7 +295,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const autoSites = res.autoSites || [];
             if (els.autoTranslateSite) els.autoTranslateSite.checked = autoSites.includes(currentDomain);
             
-            // 7. 检查当前页面是否正在翻译中 (Sync State)
             chrome.tabs.sendMessage(tab.id, { action: "GET_STATE" }, (response) => {
               if (chrome.runtime.lastError) return; 
               if (response && response.isTranslating) {
@@ -269,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       
-      // 8. 触发一次输入框检测 (清除按钮显隐)
+      // --- G. 清除按钮显隐状态检测 ---
       ['custom-api-url', 'custom-model-name', 'api-key'].forEach(id => {
         const input = document.getElementById(id);
         if (input) input.dispatchEvent(new Event('input'));
@@ -335,6 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       if (provider === 'custom') {
         els.customOptions.classList.remove('hidden');
+        // 清空自定义输入框
         if (els.customUrl) {
           els.customUrl.value = ""; 
           els.customUrl.dispatchEvent(new Event('input'));
@@ -347,6 +384,19 @@ document.addEventListener('DOMContentLoaded', () => {
         els.customOptions.classList.add('hidden');
         if (els.customUrl) els.customUrl.value = config.url;
         if (els.customModel) els.customModel.value = config.model;
+      }
+
+      // 2. ★★★ 新增：如果选了内置线路，隐藏或禁用 Key 输入框 ★★★
+      if (provider.startsWith('builtin_')) {
+        els.apiPanel.classList.add('builtin-mode'); // 可以加个样式置灰
+        els.apiKey.disabled = true;
+        els.apiKey.placeholder = "内置模式：无需填写 Key";
+        els.apiTips.textContent = "🚀 正在使用云端内置 Key，免费且高速";
+      } else {
+        els.apiPanel.classList.remove('builtin-mode');
+        els.apiKey.disabled = false;
+        els.apiKey.placeholder = "请输入 API Key (sk-...)";
+        els.apiTips.textContent = "Key 仅保存在本地，不会上传服务器。";
       }
     });
   }
@@ -377,18 +427,24 @@ document.addEventListener('DOMContentLoaded', () => {
   if (els.saveKeyBtn) {
     els.saveKeyBtn.addEventListener('click', () => {
       const key = els.apiKey ? els.apiKey.value.trim() : '';
-      const provider = els.providerSelect ? els.providerSelect.value : 'moonshot';
+      const provider = els.providerSelect ? els.providerSelect.value : 'builtin_glm';
       let apiUrl = els.customUrl ? els.customUrl.value.trim() : '';
       let modelName = els.customModel ? els.customModel.value.trim() : '';
       
-      // 预设厂商强行修正 URL
+      // 从配置表获取默认 URL 和 Model (防止用户改乱了)
       if (provider !== 'custom') {
-        apiUrl = PROVIDERS[provider].url;
-        modelName = PROVIDERS[provider].model;
+        const config = PROVIDERS[provider];
+        if(config) {
+           apiUrl = config.url;
+           modelName = config.model;
+        }
       }
 
-      // 验证
-      if (!key && provider !== 'custom' && provider !== 'moonshot' && provider !== 'deepseek') {
+      // 验证逻辑 (内置模式不需要 Key，官方模式需要)
+      const isBuiltin = provider.startsWith('builtin_');
+      const isOllama = provider === 'ollama';
+      
+      if (!isBuiltin && !isOllama && !key && provider !== 'custom') {
         els.saveKeyBtn.textContent = "请填写 API Key";
         setTimeout(() => els.saveKeyBtn.textContent = i18n[currentUiLang].btnSave, 1500);
         return;
@@ -397,24 +453,28 @@ document.addEventListener('DOMContentLoaded', () => {
       const t = i18n[currentUiLang] || i18n['zh'];
       let feedbackMsg = t.btnSaved;
       
-      if (!key && (provider === 'moonshot' || provider === 'deepseek')) {
-        feedbackMsg = t.msgDefaultUsed;
-      } else if (modelName) {
-        feedbackMsg = t.msgSavedUsing.replace('{model}', modelName);
-      }
-
       chrome.storage.local.set({ 
         apiKey: key,
         provider: provider,
         apiUrl: apiUrl,
         modelName: modelName
       }, () => {
+        // 更新 UI
         updateModelSubtitle(modelName, provider);
         els.saveKeyBtn.textContent = feedbackMsg;
+        
+        // ★★★ 新增：2秒后自动收起面板 ★★★
         setTimeout(() => {
+          // 1. 恢复按钮文字
           els.saveKeyBtn.textContent = t.btnSave;
+          
+          // 2. 收起面板
           if (els.apiPanel) els.apiPanel.classList.add('hidden');
-        }, 2000);
+          
+          // 3. 复位旋转箭头 (如果有的话)
+          if (els.toggleApi) els.toggleApi.classList.remove('active');
+          
+        }, 2000); // 2秒后自动收起面板
       });
     });
   }

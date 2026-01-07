@@ -19,38 +19,52 @@ chrome.runtime.onConnect.addListener((port) => {
         const settings = await chrome.storage.local.get(['apiKey', 'apiUrl', 'modelName', 'provider']);
         
         const apiKey = settings.apiKey;
-        // 如果没有设置 provider，默认为 moonshot
-        const provider = settings.provider || DEFAULT_PROVIDER;
-        let modelName = settings.modelName || DEFAULT_MODEL;
         
-        // 智能判断逻辑
-        let targetApiUrl = settings.apiUrl || DEFAULT_API_URL;
+        // 【解决问题 3】默认厂商改为 "builtin_glm" (速度快，体验好)
+        const provider = settings.provider || 'builtin_glm'; 
+        
+        let modelName = settings.modelName; 
+        let targetApiUrl = settings.apiUrl;
         let useBuiltIn = false;
 
-        // ★★★ 修改：如果厂商是 Moonshot (Kimi) 且没填 Key -> 启用内置代理 ★★★
-        // 或者 provider 为空（初次使用），也走内置
-        if ((provider === 'moonshot' || !provider) && !apiKey) {
-          console.log("启用内置 Kimi 代理模式");
+        // --- 2. 路由逻辑 ---
+        if (provider.startsWith('builtin_')) {
+          console.log(`[Mode] 启用内置线路: ${provider}`);
           useBuiltIn = true;
-          targetApiUrl = BUILTIN_PROXY_URL;
-          // 这里的 modelName 即使前端传了 moonshot-v1-8k，云函数那边也会强制覆盖，但保持一致更好
-          modelName = "kimi-k2-turbo-preview"; 
-        } else if (provider === 'deepseek' && !apiKey) {
-           // 兼容旧逻辑：如果用户非要选 DeepSeek 但没填 Key，也可以走代理（前提是你云函数支持或你想支持）
-           // 这里建议：没填 Key 一律走 Kimi 代理
-           console.log("DeepSeek 未填 Key，自动切换至 Kimi 内置代理");
-           useBuiltIn = true;
-           targetApiUrl = BUILTIN_PROXY_URL;
-        } else {
-          // 自定义模式或填了 Key，必须校验
-          if (!apiKey && provider !== 'custom') {
-            port.postMessage({ error: "请在插件设置中配置 API Key" });
+          targetApiUrl = BUILTIN_PROXY_URL; 
+          
+          if (provider === 'builtin_deepseek') modelName = "deepseek-ai/DeepSeek-V3";
+          else if (provider === 'builtin_glm') modelName = "glm-4-flash";
+          else if (provider === 'builtin_kimi') modelName = "kimi-k2-turbo-preview";
+        } 
+        else {
+          if (!apiKey && provider !== 'custom' && provider !== 'ollama') {
+            port.postMessage({ error: "请配置 API Key，或切换到【内置免费线路】" });
             return;
+          }
+
+          // 兜底 URL
+          if (!targetApiUrl) {
+             if (provider === 'deepseek') targetApiUrl = "https://api.deepseek.com/chat/completions";
+             else if (provider === 'moonshot') targetApiUrl = "https://api.moonshot.cn/v1/chat/completions";
+             else if (provider === 'siliconflow') targetApiUrl = "https://api.siliconflow.cn/v1/chat/completions";
+             else if (provider === 'qwen') targetApiUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+             else if (provider === 'openai') targetApiUrl = "https://api.openai.com/v1/chat/completions";
+             else if (provider === 'zhipu') targetApiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+             else if (provider === 'groq') targetApiUrl = "https://api.groq.com/openai/v1/chat/completions";
+             else if (provider === 'openrouter') targetApiUrl = "https://openrouter.ai/api/v1/chat/completions";
+             else if (provider === 'ollama') targetApiUrl = "http://localhost:11434/v1/chat/completions";
+          }
+          
+          if (!modelName) {
+             if (provider === 'deepseek') modelName = "deepseek-chat";
+             else if (provider === 'moonshot') modelName = "kimi-k2-turbo-preview";
+             else if (provider === 'openai') modelName = "gpt-4o-mini";
           }
         }
 
-        // --- 核心：提示词工程 (保持不变) ---
-        let systemPrompt;
+        // --- 核心：提示词工程 ---
+        
         // --- 修复：完整的语言映射表 ---
         const langMap = {
           "zh": "Simplified Chinese",
@@ -79,28 +93,28 @@ chrome.runtime.onConnect.addListener((port) => {
         // 如果找不到对应的，默认使用 Simplified Chinese
         const langName = langMap[targetLang] || "Simplified Chinese";
 
-        // 核心优化 1: 使用示例 (Few-Shot) 代替冗长的说明
-        // AI 模仿示例的能力远强于阅读复杂的规则说明
-        const oneShotExample = `Example Input: Hello world ||| 123 ||| Code: JS
-Example Output: 你好世界 ||| 123 ||| 代码：JS`;
+        // ★★★ 核心修复：判断输入文本是否包含分隔符 ★★★
+        const isBatch = text.includes("|||"); 
+
+        let systemPrompt = "";
+        // 只有在 Batch 模式下，才给 AI 看分隔符示例，防止单句翻译时产生幻觉
+        const batchInstruction = isBatch 
+          ? `\nIMPORTANT: The input uses "|||" to separate parts. Output MUST use "|||" to separate translations. Count must match.\nExample: Hello world ||| 123 ||| Code: JS -> 你好世界 ||| 123 ||| 代码：JS`
+          : ``;
 
         if (mode === 'precision') {
-          systemPrompt = `Translate the text to ${langName}.
-Critical Rules:
-1. STRUCTURE: The number of "|||" separators MUST match the input.
-2. CONTENT: Translate text naturally. 
-3. EXCEPTION: Do NOT translate pure numbers, codes, or formulas—copy them as is. Do NOT skip them.
-
-${oneShotExample}`;
+          // 精翻模式
+          systemPrompt = `You are a professional translator. Translate the text to ${langName}.
+Guidelines:
+1. Nuance & Tone: Professional and authentic.${batchInstruction}
+2. Content: Translate everything. Do not skip numbers or codes.
+3. Output: Only the translated text.`;
         } else {
-          // 极速模式
-          systemPrompt = `Translate to ${langName}.
+          // === 极速模式 ===
+          systemPrompt = `Translate to ${langName}.${batchInstruction}
 Rules:
-1. Keep "|||" separators exactly as is.
-2. If a segment is a number/symbol, copy it. Do NOT skip anything.
-3. Be concise.
-
-${oneShotExample}`;
+1. Concise.${isBatch ? ' Keep "|||" structure.' : ''}
+2. No missing parts.`;
         }
 
         // === 修正 3：构建请求头 ===
@@ -127,7 +141,7 @@ ${oneShotExample}`;
 
             // 核心优化 2: 调整温度
             // 极速模式(0.3)更稳，精翻模式(0.7)更顺滑。原先的 1.3 太高了容易导致乱码或超时
-            temperature: mode === 'precision' ? 0.7 : 0.3, 
+            temperature: mode === 'precision' ? 0.6 : 0.3, 
             // 核心优化 3: 惩罚重复，防止 AI 卡住复读
             frequency_penalty: 0.2
           })
