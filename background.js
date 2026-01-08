@@ -19,7 +19,7 @@ function saveCacheToLocal() {
 }
 
 // 你的腾讯云代理地址 (确保末尾有 /proxy)
-const BUILTIN_PROXY_URL = "https://https://translate-deepseek-7dgwa0a2a0e41-1317980685.ap-shanghai.app.tcloudbase.com/vip-server";
+const BUILTIN_PROXY_URL = "https://translate-deepseek-7dgwa0a2a0e41-1317980685.ap-shanghai.app.tcloudbase.com/md-server";
 
 // 默认 API 地址 (改为 Kimi)
 const DEFAULT_API_URL = "https://api.moonshot.cn/v1/chat/completions";
@@ -59,7 +59,7 @@ chrome.runtime.onConnect.addListener((port) => {
         // 【解决问题 3】默认厂商改为 "builtin_glm" (速度快，体验好)
         const provider = settings.provider || 'builtin_glm'; 
         
-        let modelName = settings.modelName; 
+        let modelName = settings.modelName || "deepseek-ai/DeepSeek-V3"; 
         let targetApiUrl = settings.apiUrl;
         let useBuiltIn = false;
 
@@ -163,37 +163,45 @@ ${commonRules}${isBatch ? '\n4. Keep "|||" separators.' : ''}
 ${batchExample}`;
         }
 
-        // === 修正 3：构建请求头 ===
+        // --- 3. 极简请求头构建 (防止 Header 超限) ---
+        // 默认只保留 Content-Type，极其“抠门”地节省字节
         const headers = {
-          "Content-Type": "application/json"
         };
         
-        // 只有【不是】内置模式时，才发送 Key
-        // 内置模式下，Key 在腾讯云后台，前端不发，防止泄露
-        if (!useBuiltIn) {
+        // 只有【不是】内置模式时，才发送 Authorization
+        // 这一步能省掉几十个字节
+        if (!useBuiltIn && apiKey) {
           headers["Authorization"] = `Bearer ${apiKey}`;
         }
 
-        // 打印日志，方便你在 Service Worker 控制台看 AI 到底回了什么垃圾
-        console.log(`[Prompt] Mode:${mode} | Batch:${isBatch} | Target:${langName}`);
+        console.log(`[Fetch] Mode:${mode} | Target:${langName} | BuiltIn:${useBuiltIn}`);
 
+        // --- 4. 发起请求 (极致瘦身版) ---
         const response = await fetch(targetApiUrl, {
-          method: "POST", headers: headers,
+          method: "POST", 
+          headers: headers,
+
+          // ★★★ 核心关键点 1：绝对禁止发送 Cookie ★★★
+          credentials: 'omit', 
+          
+          // ★★★ 核心关键点 2：不发送 Referer (能省几十到几百字节) ★★★
+          referrerPolicy: "no-referrer",
+
+          // ★★★ 核心关键点 3：强制跨域模式，减少不必要的预检信息 ★★★
+          mode: "cors",
+
+          // Body 内容保持不变
           body: JSON.stringify({
-            model: modelName, traceId: traceId,
-            // 【解决问题 4】增加激活码校验
+            model: modelName, 
+            traceId: traceId,
             licenseKey: settings.licenseKey || '',
-            installTimestamp: installTime,// 告诉云端我是什么时候装的
+            installTimestamp: installTime,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: text }
             ],
             stream: true,
-
-            // 核心优化 2: 调整温度
-            // 极速模式(0.3)更稳，精翻模式(0.7)更顺滑。原先的 1.3 太高了容易导致乱码或超时
             temperature: mode === 'precision' ? 0.4 : 0.4, 
-            // 核心优化 3: 惩罚重复，防止 AI 卡住复读
             frequency_penalty: 0.5
           })
         });
