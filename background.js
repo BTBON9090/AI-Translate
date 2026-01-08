@@ -19,7 +19,7 @@ function saveCacheToLocal() {
 }
 
 // 你的腾讯云代理地址 (确保末尾有 /proxy)
-const BUILTIN_PROXY_URL = "https://translate-deepseek-7dgwa0a2a0e41-1317980685.ap-shanghai.app.tcloudbase.com/proxy";
+const BUILTIN_PROXY_URL = "https://https://translate-deepseek-7dgwa0a2a0e41-1317980685.ap-shanghai.app.tcloudbase.com/vip-server";
 
 // 默认 API 地址 (改为 Kimi)
 const DEFAULT_API_URL = "https://api.moonshot.cn/v1/chat/completions";
