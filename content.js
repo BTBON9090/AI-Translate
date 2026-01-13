@@ -1,7 +1,31 @@
+/*
+ * ==========================================================================
+ * ⚠️ 版权声明 (Copyright Notice)
+ * ==========================================================================
+ * 
+ * 本软件由 [BTBONN，倪城，nc0032@qq.com] 开发，受著作权法保护。
+ * Copyright (c) 2024 [BTBONN，倪城，nc0032@qq.com]. All Rights Reserved.
+ * 
+ * 1. 授权范围：
+ *    本软件仅供购买者个人使用。未经作者书面许可，严禁任何形式的
+ *    复制、分发、破解、反编译或用于其他商业用途。
+ * 
+ * 2. 法律后果：
+ *    擅自传播或修改本软件代码将构成侵权，作者保留追究法律责任的权利。
+ * 
+ * 3. 获取正版：
+ *    获取更新或技术支持，请关注小红书作者：[BTBONN]
+ *    小红书主页：https://www.xiaohongshu.com/user/profile/6252abd90000000010006abc?xsec_token=YB0uWUekOh2DpxdAhPqp-lvOau79DgGu2Xlp61H5MS4oY%3D&xsec_source=app_share&xhsshare=&shareRedId=ODg3MkRHSEI2NzUyOTgwNjczOTc6RkhM&apptime=1768037777&share_id=246ee3c596344bf59484ffc52815aa59&share_channel=copy_link
+ * 
+ * ==========================================================================
+ */
+// --- START OF FILE background.js ---
+console.log("如果你也喜欢这个插件，请关注作者小红书【BTBONN】获取最新模型配置与更新动态。");
 /* ==============================================
    模块 1: 全局变量与初始化
    ============================================== */
 console.log("AI Minimal Translator: Content Script Loaded");
+
 const TRANSLATION_MARK_ATTR = 'data-ai-translated';
 const ORIGIN_MARK_ATTR = 'data-ai-origin'; 
 const ICON_SVG = `<svg class="ai-icon-svg" viewBox="0 0 24 24"><path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>`;
@@ -302,10 +326,6 @@ class SelectionManager {
         'groq': "⚡️ Llama 3 (Groq)",
         'openrouter': "🌐 OpenRouter",
         'ollama': "🏠 Local Ollama",
-        // 新增内置线路映射
-        'builtin_deepseek': "🚀 DeepSeek (Built-in)",
-        'builtin_glm': "⚡️ GLM-4 (Built-in)",
-        'builtin_kimi': "🌙 Kimi (Built-in)",
         'custom': "⚙️ Custom Model"
     };
     let cardTitle = titleMap[provider] || "AI Translator";

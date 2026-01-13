@@ -231,8 +231,64 @@ input:checked + .slider:before { transform: translateX(16px); }
 .clear-btn.visible { display: flex; }
 
 
-.input-group { position: relative; margin-bottom: 10px; }
+.input-group { position: relative; margin-bottom: 4px; }
 .input-group input { width: 100%; padding: 10px 36px 10px 10px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; font-size: 12px; }
 
-.save-btn { width: 100%; padding: 8px; background: #f1f5f9; color: var(--text-main); border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.save-btn { width: 100%; padding: 8px; background: #f1f5f9; color: var(--text-main); border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px;}
 .save-btn:hover { background: #e2e8f0; }
+
+/* === 小红书 & 打赏卡片样式 (NEW) === */
+.xhs-card {
+  margin-top: 15px;
+  background: #c8000d;
+  padding: 12px 15px;
+  border-radius: 10px;
+  border: 1px solid #950011;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.xhs-text { font-size: 11px; color: #ffffff; flex: 1; }
+.xhs-title { font-weight: bold; font-size: 12px; margin-bottom: 3px; }
+.xhs-desc { opacity: 0.85; }
+
+.xhs-icons { display: flex; gap: 10px; }
+
+.qr-wrapper { position: relative; cursor: pointer; }
+
+/* 圆形图标按钮 */
+.icon-btn-circle {
+  width: 32px; height: 32px; border-radius: 20%;
+  display: flex; align-items: center; justify-content: center;
+  background: white; box-shadow: 0 2px 5px rgba(85, 0, 18, 0.748);
+  transition: all 0.2s; border: 0px solid #fda4af; font-size: 16px; user-select: none;
+}
+.icon-btn-circle:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(225, 29, 72, 0.25); background: #fff1f2; }
+
+/* 悬浮二维码弹窗 */
+.qr-tooltip {
+  position: absolute; bottom: 40px; right: 0; width: 140px;
+  background: white; padding: 8px; border-radius: 8px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.15); border: 1px solid #e2e8f0;
+  opacity: 0; visibility: hidden; transform: translateY(10px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 999; text-align: center; pointer-events: none;
+}
+.qr-wrapper:hover .qr-tooltip { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
+
+.qr-img { width: 100%; height: auto; display: block; border-radius: 4px; }
+.qr-desc { font-size: 10px; color: #64748b; margin-top: 5px; }
+
+/* 小箭头 */
+.qr-tooltip::after {
+  content: ''; position: absolute; bottom: -5px; right: 12px;
+  width: 10px; height: 10px; background: white;
+  transform: rotate(45deg); border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;
+}
+
+/* Footer */
+.app-footer {
+  text-align: center; margin-top: 20px; padding-bottom: 10px;
+  color: #cbd5e1; font-size: 10px;
+}

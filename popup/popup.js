@@ -1,3 +1,26 @@
+/*
+ * ==========================================================================
+ * ⚠️ 版权声明 (Copyright Notice)
+ * ==========================================================================
+ * 
+ * 本软件由 [BTBONN，倪城，nc0032@qq.com] 开发，受著作权法保护。
+ * Copyright (c) 2024 [BTBONN，倪城，nc0032@qq.com]. All Rights Reserved.
+ * 
+ * 1. 授权范围：
+ *    本软件仅供购买者个人使用。未经作者书面许可，严禁任何形式的
+ *    复制、分发、破解、反编译或用于其他商业用途。
+ * 
+ * 2. 法律后果：
+ *    擅自传播或修改本软件代码将构成侵权，作者保留追究法律责任的权利。
+ * 
+ * 3. 获取正版：
+ *    获取更新或技术支持，请关注小红书作者：[BTBONN]
+ *    小红书主页：https://www.xiaohongshu.com/user/profile/6252abd90000000010006abc?xsec_token=YB0uWUekOh2DpxdAhPqp-lvOau79DgGu2Xlp61H5MS4oY%3D&xsec_source=app_share&xhsshare=&shareRedId=ODg3MkRHSEI2NzUyOTgwNjczOTc6RkhM&apptime=1768037777&share_id=246ee3c596344bf59484ffc52815aa59&share_channel=copy_link
+ * 
+ * ==========================================================================
+ */
+// --- START OF FILE background.js ---
+console.log("如果你也喜欢这个插件，请关注作者小红书【BTBONN】获取最新模型配置与更新动态。");
 document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   // 1. 国际化字典 (i18n)
@@ -75,8 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
     },
 
     // === 官方线路 (需要用户填 Key) ===
-    moonshot: { url: "https://api.moonshot.cn/v1/chat/completions", model: "kimi-k2-turbo-preview" },
     deepseek: { url: "https://api.deepseek.com/chat/completions", model: "deepseek-chat" },
+    moonshot: { url: "https://api.moonshot.cn/v1/chat/completions", model: "kimi-k2-turbo-preview" },
     openai:   { url: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini" },
     qwen:     { url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen-turbo" },
     siliconflow: { url: "https://api.siliconflow.cn/v1/chat/completions", model: "deepseek-ai/DeepSeek-V3" },
@@ -147,72 +170,21 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // 2. 初始化逻辑 (放在 init 或 DOMContentLoaded 里)
-  chrome.storage.local.get(['installTimestamp', 'licenseKey', 'licenseExpire'], (res) => {
-    const now = Date.now();
-    
-    // A. 首次安装时间锚点 (如果用户删了插件重装，这个会被重置，这是纯前端防不住的，但对MVP够了)
-    let installTime = res.installTimestamp;
-    if (!installTime) {
-      installTime = now;
-      chrome.storage.local.set({ installTimestamp: installTime });
-    }
+  chrome.storage.local.get(['apiKey', 'provider', 'apiUrl', 'modelName', 'targetLang', 'bilingualMode', 'transStyle', 'precisionMode', 'showBubble', 'autoSites', 'uiLang'], 
+    (res) => {
+    // 1. 获取当前厂商，如果没存过，默认为 'deepseek'
+    const currentProvider = res.provider || 'deepseek'; 
+    if (els.providerSelect) els.providerSelect.value = currentProvider;
 
-    // B. 计算试用期 (30天)
-    const TRIAL_DAYS = 30;
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const daysUsed = (now - installTime) / msPerDay;
-    const daysLeft = Math.ceil(TRIAL_DAYS - daysUsed);
-    
-    // C. 检查是否已激活 VIP
-    const hasLicense = !!res.licenseKey;
-    
-    if (hasLicense) {
-      // === 状态：付费会员 ===
-      els.statusLabel.textContent = "尊贵会员 ✨";
-      els.statusLabel.style.color = "#ea580c"; // 橙色
-      els.trialBar.classList.add('hidden'); // 隐藏进度条
-      els.activationArea.classList.add('hidden'); // 隐藏输入框
-      els.activeInfo.classList.remove('hidden'); // 显示有效期
-      // 显示到期时间 (如果云端返回了时间)
-      if (res.licenseExpire) {
-        els.expireDateLabel.textContent = new Date(res.licenseExpire).toLocaleDateString();
-      }
-    } else {
-      // === 状态：试用或过期 ===
-      if (daysLeft > 0) {
-        // 试用中
-        els.statusLabel.textContent = `试用期剩余 ${daysLeft} 天`;
-        els.statusLabel.style.color = "#16a34a"; // 绿色
-        // 更新进度条
-        const percentage = (daysUsed / TRIAL_DAYS) * 100;
-        if (els.trialFill) els.trialFill.style.width = `${Math.min(100, percentage)}%`;
-      } else {
-        // 已过期
-        els.statusLabel.textContent = "试用已结束";
-        els.statusLabel.style.color = "#dc2626"; // 红色
-        if (els.trialFill) els.trialFill.style.width = "100%";
-        if (els.trialFill) els.trialFill.style.background = "#dc2626";
-      }
+    // 2. 如果没有 Key，自动展开面板提醒用户
+    if (els.apiKey) els.apiKey.value = res.apiKey || '';
+    if (!res.apiKey && els.apiPanel) {
+        els.apiPanel.classList.remove('hidden'); 
+        if(els.toggleApi) els.toggleApi.classList.add('active'); 
     }
   });
 
-  // 3. 激活按钮点击事件
-  if (els.activateBtn) {
-    els.activateBtn.addEventListener('click', () => {
-      const key = els.licenseInput.value.trim();
-      if (!key) return;
-      
-      // 保存到本地，云端去验证
-      chrome.storage.local.set({ licenseKey: key }, () => {
-        // 视觉反馈
-        els.activateBtn.textContent = "验证中...";
-        setTimeout(() => {
-          alert("激活码已保存！请尝试翻译，系统将自动验证有效性。");
-          window.location.reload();
-        }, 800);
-      });
-    });
-  }
+  
   let currentDomain = '';
   let currentUiLang = 'zh';
 
@@ -448,33 +420,18 @@ document.addEventListener('DOMContentLoaded', () => {
       
       if (provider === 'custom') {
         els.customOptions.classList.remove('hidden');
-        // 清空自定义输入框
-        if (els.customUrl) {
-          els.customUrl.value = ""; 
-          els.customUrl.dispatchEvent(new Event('input'));
-        }
-        if (els.customModel) {
-          els.customModel.value = "";
-          els.customModel.dispatchEvent(new Event('input'));
-        }
+        if (els.customUrl) els.customUrl.value = ""; 
+        if (els.customModel) els.customModel.value = "";
       } else {
         els.customOptions.classList.add('hidden');
         if (els.customUrl) els.customUrl.value = config.url;
         if (els.customModel) els.customModel.value = config.model;
       }
 
-      // 2. ★★★ 新增：如果选了内置线路，隐藏或禁用 Key 输入框 ★★★
-      if (provider.startsWith('builtin_')) {
-        els.apiPanel.classList.add('builtin-mode'); // 可以加个样式置灰
-        els.apiKey.disabled = true;
-        els.apiKey.placeholder = "内置模式：无需填写 Key";
-        els.apiTips.textContent = "🚀 正在使用云端内置 Key，免费且高速";
-      } else {
-        els.apiPanel.classList.remove('builtin-mode');
-        els.apiKey.disabled = false;
-        els.apiKey.placeholder = "请输入 API Key (sk-...)";
-        els.apiTips.textContent = "Key 仅保存在本地，不会上传服务器。";
-      }
+      // 始终启用 Key 输入框
+      els.apiKey.disabled = false;
+      els.apiKey.placeholder = "请输入 API Key (sk-...)";
+      els.apiTips.textContent = "Key 仅保存在本地，插件直接请求 API 厂商。";
     });
   }
 
@@ -504,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (els.saveKeyBtn) {
     els.saveKeyBtn.addEventListener('click', () => {
       const key = els.apiKey ? els.apiKey.value.trim() : '';
-      const provider = els.providerSelect ? els.providerSelect.value : 'builtin_glm';
+      const provider = els.providerSelect ? els.providerSelect.value : 'deepseek';
       let apiUrl = els.customUrl ? els.customUrl.value.trim() : '';
       let modelName = els.customModel ? els.customModel.value.trim() : '';
       
@@ -517,16 +474,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // 验证逻辑 (内置模式不需要 Key，官方模式需要)
-      const isBuiltin = provider.startsWith('builtin_');
-      const isOllama = provider === 'ollama';
-      
-      if (!isBuiltin && !isOllama && !key && provider !== 'custom') {
+      // 验证：除非是 Ollama 或 Custom，否则必须有 Key
+      if (!key && provider !== 'custom' && provider !== 'ollama') {
         els.saveKeyBtn.textContent = "请填写 API Key";
         setTimeout(() => els.saveKeyBtn.textContent = i18n[currentUiLang].btnSave, 1500);
         return;
       }
-
+      
       const t = i18n[currentUiLang] || i18n['zh'];
       let feedbackMsg = t.btnSaved;
       
@@ -574,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 密码/明文切换
+  // 切换密码/明文显示
   if (els.toggleEye && els.apiKey) {
     els.toggleEye.addEventListener('click', () => {
       els.apiKey.type = els.apiKey.type === 'password' ? 'text' : 'password';

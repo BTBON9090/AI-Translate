@@ -140,9 +140,6 @@
         </div>
       </div>
 
-      <div class="beta-notice" style="text-align:center; font-size:12px; color:#94a3b8; margin-top:15px; padding-bottom:10px;">
-        Beta 版本期间，所有内置高级模型均免费开放 💖
-      </div>
       <!-- API 配置折叠区 -->
       <div class="api-section">
         <div class="accordion-header" id="toggle-api">
@@ -157,26 +154,16 @@
             <label id="lbl-provider">模型服务商</label>
             <!-- 修改后的 provider-select -->
             <select id="provider-select" class="modern-select full-width-select">
-              <!-- 组 1：内置免费线路 -->
-              <optgroup label="🎁 免费内置线路 (Beta福利)">
-                <option value="builtin_glm">⚡️ GLM-4 Flash-永久免费</option>
-                <option value="builtin_deepseek">🚀 DeepSeek V3-限时免费</option>
-                <option value="builtin_kimi">🌙 Kimi-限时免费</option>
-              </optgroup>
-
-              <!-- 组 2：自定义/官方线路 -->
-              <optgroup label="🔑 官方/自定义 API (需填 Key)">
-                <option value="deepseek">✨ DeepSeek 官方</option>
-                <option value="moonshot">🌙 Kimi 官方</option>
-                <option value="siliconflow">🚀 硅基流动 (SiliconFlow)</option>
-                <option value="qwen">🟣 通义千问 (Qwen)</option>
-                <option value="zhipu">🎓 智谱清言 (BigModel)</option>
-                <option value="openai">🤖 OpenAI (GPT-4o)</option>
-                <option value="groq">⚡️ Groq</option>
-                <option value="openrouter">🌐 OpenRouter</option>
-                <option value="ollama">🏠 Ollama (本地)</option>
-                <option value="custom">⚙️ 自定义 (Custom)</option>
-              </optgroup>
+              <option value="deepseek">✨ DeepSeek 官方</option>
+              <option value="moonshot">🌙 Kimi 官方</option>
+              <option value="siliconflow">🚀 硅基流动 (SiliconFlow)</option>
+              <option value="qwen">🟣 通义千问 (Qwen)</option>
+              <option value="zhipu">🎓 智谱清言 (BigModel)</option>
+              <option value="openai">🤖 OpenAI (GPT-4o)</option>
+              <option value="groq">⚡️ Groq</option>
+              <option value="openrouter">🌐 OpenRouter</option>
+              <option value="ollama">🏠 Ollama (本地)</option>
+              <option value="custom">⚙️ 自定义 (Custom)</option>
             </select>
           </div>
 
@@ -219,53 +206,51 @@
             </div>
           </div>
           
-          <div class="api-tips" id="lbl-api-tips">Key 仅保存在本地，不会上传。</div>
+          <div class="api-tips" id="lbl-api-tips">Key 仅保存在本地，直接请求 API 厂商。</div>
           <button id="save-key-btn" class="save-btn">保存配置</button>
         </div>
-      </div>
+      </div> 
       
-      <!-- popup/popup.html -> 放在 </main> 之前 -->
-
-      <!-- 会员/激活卡片 -->
-      <div class="activation-card" style="margin-top:15px; background:#f8fafc; padding:15px; border-radius:10px; border:1px solid #e2e8f0;">
-        <!-- 头部：状态显示 -->
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <span style="font-weight:600; color:#334155; font-size:13px;">💎 会员状态</span>
-          <span id="membership-status" style="font-size:12px; font-weight:bold; color:#16a34a;">检测中...</span>
+      <!-- 小红书 & 打赏卡片 -->
+      <div class="xhs-card">
+        <!-- 左侧文案 -->
+        <div class="xhs-text">
+            <div class="xhs-title">✨ 关注 & 支持作者</div>
+            <div class="xhs-desc">获取更新动态和跟多功能<br>or...请我喝杯奶茶提提神 🥤</div>
         </div>
 
-        <!-- 进度条 (仅试用期显示) -->
-        <div id="trial-progress-bar" style="width:100%; height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden; margin-bottom:10px;">
-          <div id="trial-progress-fill" style="width:100%; height:100%; background:#3b82f6;"></div>
-        </div>
+        <!-- 右侧图标组 -->
+        <div class="xhs-icons">
+            
+            <!-- 1. 小红书关注 -->
+            <div class="qr-wrapper">
+                <div class="icon-btn-circle" title="关注小红书">📕</div>
+                <!-- 悬浮二维码 -->
+                <div class="qr-tooltip">
+                    <img src="/images/xhs_qr.png" class="qr-img" alt="小红书二维码">
+                    <div class="qr-desc">扫码关注获取更新</div>
+                </div>
+            </div>
 
-        <!-- 激活输入区域 -->
-        <div id="activation-area">
-          <div style="font-size:11px; color:#64748b; margin-bottom:8px; line-height:1.4;">
-            内置高级通道 (DeepSeek/GLM) 订阅仅需 ¥19.9/月。<br>
-            <a href="https://btbon9090.github.io/ai-translator-pay/" target="_blank" style="color:#3b82f6; text-decoration:underline; font-weight:600;">
-              👉 点击获取激活码
-            </a>
-            ←←家里孩子就想喝杯奶茶🧋
-          </div>
-          
-          <div class="input-wrapper" style="display:flex; gap:5px;">
-            <input type="text" id="license-key-input" placeholder="输入 M- 开头的激活码" 
-                  style="flex:1; padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px;">
-            <button id="btn-activate" style="
-              background:#3b82f6; color:white; border:none; border-radius:6px; 
-              padding:0 12px; font-size:12px; cursor:pointer; font-weight:500;">
-              激活
-            </button>
-          </div>
-        </div>
-        
-        <!-- 已激活状态下显示的信息 (默认隐藏) -->
-        <div id="active-info" class="hidden" style="font-size:11px; color:#64748b; margin-top:5px;">
-          有效期至：<span id="expire-date">--</span>
+            <!-- 2. 打赏 -->
+            <div class="qr-wrapper">
+                <div class="icon-btn-circle" title="打赏一杯奶茶">💰</div>
+                <!-- 悬浮二维码 -->
+                <div class="qr-tooltip">
+                    <img src="/images/pay_qr.png" class="qr-img" alt="收款码">
+                    <div class="qr-desc">阖家欢乐 恭喜发财 谢谢老板</div>
+                </div>
+            </div>
+
         </div>
       </div>
-      
+
+      <!-- 版权底部 -->
+      <footer class="app-footer">
+        <div>AI Translator v1.0.0</div>
+        <div>&copy; 2026.0110 BTBONN. All rights reserved.</div>
+      </footer>
+
     </main>
   </div>
   <script src="popup.js"></script>
