@@ -97,17 +97,7 @@
           </select>
         </div>
 
-        <!-- 新增：AI 精翻模式 -->
-        <div class="setting-item">
-          <label for="precision-mode">
-            <span id="lbl-precision-main">AI 精翻模式</span>
-            <span id="lbl-precision-sub" style="display:block; font-size:10px; color:#94a3b8; font-weight:400;">深度理解语境，更通顺但稍慢</span>
-          </label>
-          <label class="switch">
-            <input type="checkbox" id="precision-mode">
-            <span class="slider"></span>
-          </label>
-        </div>
+        <!-- 精翻模式已移除 (默认开启) -->
 
         <!-- 悬浮球开关 -->
         <div class="setting-item">
@@ -118,7 +108,7 @@
           </label>
         </div>
 
-        <div class="setting-item" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
+        <div class="setting-item" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px; display: none;">
           <label style="color:#64748b; font-size:12px;">觉得好用？</label>
           <a href="https://你的Chrome商店详情页链接" target="_blank" style="text-decoration:none;">
             <button style="
@@ -158,7 +148,9 @@
               <option value="moonshot">🌙 Kimi 官方</option>
               <option value="siliconflow">🚀 硅基流动 (SiliconFlow)</option>
               <option value="qwen">🟣 通义千问 (Qwen)</option>
-              <option value="zhipu">🎓 智谱清言 (BigModel)</option>
+              <option value="zhipu">🎓 智谱 GLM-4-Flash (免费)</option>
+              <option value="zhipu_47_flash_x">🎓 智谱 GLM-4.7-FlashX (New)</option>
+              <option value="zhipu_47_flash">🎓 智谱 GLM-4.7-Flash</option>
               <option value="openai">🤖 OpenAI (GPT-4o)</option>
               <option value="groq">⚡️ Groq</option>
               <option value="openrouter">🌐 OpenRouter</option>

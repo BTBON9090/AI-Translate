@@ -34,6 +34,8 @@ const PROVIDER_DEFAULTS = {
   qwen:        { url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen-turbo" },
   openai:      { url: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini" },
   zhipu:       { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "glm-4-flash" },
+  zhipu_47_flash_x: { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "GLM-4.7-FlashX" },
+  zhipu_47_flash:   { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "GLM-4.7-Flash" },
   groq:        { url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile" },
   openrouter:  { url: "https://openrouter.ai/api/v1/chat/completions", model: "google/gemini-2.0-flash-exp:free" },
   ollama:      { url: "http://localhost:11434/v1/chat/completions", model: "llama3" }
@@ -167,21 +169,50 @@ chrome.runtime.onConnect.addListener((port) => {
 // === 辅助函数 ===
 function getLangName(code) {
   const map = {
-    "zh": "Simplified Chinese", "en": "English", "zh-TW": "Traditional Chinese",
+    "zh": "Simplified Chinese (简体中文). NEVER use Traditional Chinese.", "en": "English", "zh-TW": "Traditional Chinese",
     "ja": "Japanese", "ko": "Korean", "fr": "French", "de": "German", "es": "Spanish",
     "ru": "Russian", "pt": "Portuguese", "it": "Italian", "nl": "Dutch", "sv": "Swedish",
     "tr": "Turkish", "pl": "Polish", "id": "Indonesian", "th": "Thai", "vi": "Vietnamese",
     "ms": "Malay", "ar": "Arabic", "hi": "Hindi"
   };
-  return map[code] || "Simplified Chinese";
+  return map[code] || "the target language";
 }
 
 function buildSystemPrompt(lang, mode, isBatch) {
-  const common = `Rules:\n1. Translate directly to ${lang}.\n2. Do NOT repeat original.\n3. Do NOT explain.`;
-  const batchRule = isBatch ? `\n4. Keep "|||" separators.` : '';
-  
-  if (mode === 'precision') {
-    return `You are a professional translator.\nTask: Translate into ${lang}.\n${common}\nStyle: Professional.${batchRule}`;
+  const langName = getLangName(lang);
+
+  // === 解读模式 (针对 glm-4-flash 深度优化版) ===
+  if (mode === 'explain') {
+    return `You are a smart reading assistant.Explain the selected text in ${langName}.tell what's the text about.
+
+REQUIREMENTS:
+1. **Explain Meaning**: If it's a word, define it. If it's a sentence, summarize it.
+2. **Provide Context**: If it's an acronym, give the **Full Name**. If it's a poem/idiom, give the **Source/Author**. If neither, write "无" (None).
+3. **Keep it Concise**: No philosophy, no long essays.
+
+OUTPUT FORMAT (Strictly follow this layout):
+【解释】 <Write explanation here>
+【全称/出处】 <Write Full Name or Source here>
+
+EXAMPLES:
+Input: "VPN"
+【解释】 虚拟专用网络，一种用于加密网络连接的技术，常用于保护隐私或远程办公。
+【全称/出处】 Virtual Private Network
+
+Input: "轻舟已过万重山"
+【解释】 形容船行极快，也比喻战胜困难后的畅快心情。
+【全称/出处】 《早发白帝城》 [唐] 李白
+
+Input: "Google released a new AI model."
+【解释】 谷歌发布了一个新的人工智能模型。
+【全称/出处】 无`;
   }
-  return `Translate to ${lang}.\n${common}${batchRule}`;
+
+  // ============================================================
+  // 2. 翻译模式 (Translate Mode) - 保持纯净
+  // ============================================================
+  const common = `Rules:\n1. Translate directly to ${lang}.\n2. Do NOT repeat original.\n3. Do NOT explain.\n4. Do NOT use markdown.`;
+  const batchRule = isBatch ? `\n5. Keep "|||" separators.` : '';
+  
+  return `You are a professional translator.\nTask: Translate into ${lang}.\n${common}\nStyle: Concise & Professional.${batchRule}`;
 }

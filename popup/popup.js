@@ -104,6 +104,8 @@ document.addEventListener('DOMContentLoaded', () => {
     qwen:     { url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen-turbo" },
     siliconflow: { url: "https://api.siliconflow.cn/v1/chat/completions", model: "deepseek-ai/DeepSeek-V3" },
     zhipu:    { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "glm-4-flash" },
+    zhipu_47_flash_x: { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "GLM-4.7-FlashX" },
+    zhipu_47_flash:   { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "GLM-4.7-Flash" },
     groq:     { url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile" },
     openrouter:{ url: "https://openrouter.ai/api/v1/chat/completions", model: "google/gemini-2.0-flash-exp:free" },
     ollama:   { url: "http://localhost:11434/v1/chat/completions", model: "llama3" },
@@ -253,7 +255,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const t = i18n[currentUiLang] || i18n['zh'];
     let displayModel = savedModelName;
     
-    // 如果是 Kimi 或 DeepSeek 且没填 Key
+    // 如果 savedModelName 为空 (旧数据)，尝试从预设获取默认值
+    if (!displayModel && provider && provider !== 'custom') {
+        const config = PROVIDERS[provider];
+        if (config) displayModel = config.model;
+    }
+
+    // 特殊情况：没有 Key 时的内置模式提示
     const apiKeyVal = els.apiKey ? els.apiKey.value : '';
     if ((provider === 'moonshot' || !provider) && !apiKeyVal) {
       displayModel = "Kimi (Built-in)";
@@ -418,12 +426,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const provider = e.target.value;
       const config = PROVIDERS[provider];
       
+      // 始终显示自定义选项，允许用户修改模型细节
+      els.customOptions.classList.remove('hidden');
+
       if (provider === 'custom') {
-        els.customOptions.classList.remove('hidden');
         if (els.customUrl) els.customUrl.value = ""; 
         if (els.customModel) els.customModel.value = "";
       } else {
-        els.customOptions.classList.add('hidden');
         if (els.customUrl) els.customUrl.value = config.url;
         if (els.customModel) els.customModel.value = config.model;
       }
@@ -465,12 +474,12 @@ document.addEventListener('DOMContentLoaded', () => {
       let apiUrl = els.customUrl ? els.customUrl.value.trim() : '';
       let modelName = els.customModel ? els.customModel.value.trim() : '';
       
-      // 从配置表获取默认 URL 和 Model (防止用户改乱了)
+      // 从配置表获取默认 URL 和 Model (仅当用户未填写时兜底，允许用户覆盖)
       if (provider !== 'custom') {
         const config = PROVIDERS[provider];
         if(config) {
-           apiUrl = config.url;
-           modelName = config.model;
+           if (!apiUrl) apiUrl = config.url;
+           if (!modelName) modelName = config.model;
         }
       }
 

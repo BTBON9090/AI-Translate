@@ -314,25 +314,44 @@ class SelectionManager {
     this.card = document.createElement('div');
     this.card.className = 'ai-card';
 
-    const settings = await chrome.storage.local.get(['targetLang', 'precisionMode', 'provider']);
+    const settings = await chrome.storage.local.get(['targetLang', 'precisionMode', 'provider', 'modelName']);
     const provider = settings.provider || 'builtin_glm'; 
-    
-    const titleMap = {
-        'deepseek': "✨ DeepSeek",
-        'openai': "🤖 OpenAI",
-        'qwen': "🟣 Qwen",
-        'siliconflow': "🚀 SiliconFlow",
-        'zhipu': "🎓 GLM-4",
-        'groq': "⚡️ Llama 3 (Groq)",
-        'openrouter': "🌐 OpenRouter",
-        'ollama': "🏠 Local Ollama",
-        'custom': "⚙️ Custom Model"
-    };
-    let cardTitle = titleMap[provider] || "AI Translator";
+    const currentModel = settings.modelName || ""; // 获取具体模型名
 
-    if (titleMap[provider]) {
-        cardTitle = titleMap[provider];
+    const titlePrefixMap = {
+        'deepseek': "✨",
+        'openai': "🤖",
+        'qwen': "🟣",
+        'siliconflow': "🚀",
+        'zhipu': "🎓",
+        'groq': "⚡️",
+        'openrouter': "🌐",
+        'ollama': "🏠",
+        'custom': "⚙️"
+    };
+
+    // 构建标题逻辑：Emoji + (具体模型名 OR 厂商名)
+    // 优先显示具体模型名，如果太长或者是默认的，也可以考虑优化，但用户要求明确告知自定义模型，所以优先展示 modelName
+    let prefix = titlePrefixMap[provider] || "🤖";
+    let displayModel = currentModel;
+    
+    // 如果没有具体模型名（比如旧数据），回退到厂商名
+    if (!displayModel) {
+       const providerNames = {
+          'deepseek': "DeepSeek",
+          'openai': "OpenAI",
+          'qwen': "Qwen",
+          'siliconflow': "SiliconFlow",
+          'zhipu': "GLM-4",
+          'groq': "Llama 3 (Groq)",
+          'openrouter': "OpenRouter",
+          'ollama': "Local Ollama",
+          'custom': "Custom Model"
+       };
+       displayModel = providerNames[provider] || "AI Translator";
     }
+
+    let cardTitle = `${prefix} ${displayModel}`;
     
     Object.assign(this.card.style, {
       position: 'absolute',
@@ -353,9 +372,14 @@ class SelectionManager {
     this.card.innerHTML = `
       <div class="ai-card-header" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;cursor:grab;">
         <span style="font-weight:600;color:#475569;font-size:13px;display:flex;align-items:center;gap:6px;">${cardTitle}</span>
-        <span class="ai-card-close" style="cursor:pointer;color:#94a3b8;font-size:18px;line-height:1;">×</span>
+        <div style="display:flex;gap:10px;align-items:center;">
+           <button id="ai-btn-explain" class="ai-action-btn" style="border:none;background:none;cursor:pointer;font-size:13px;color:#64748b;padding:2px 6px;border-radius:4px;display:flex;align-items:center;gap:4px;transition:all 0.2s;">
+             <span>💡</span> 解读
+           </button>
+           <span class="ai-card-close" style="cursor:pointer;color:#94a3b8;font-size:18px;line-height:1;">×</span>
+        </div>
       </div>
-      <div class="ai-card-body" style="padding:16px;font-size:14px;color:#334155;line-height:1.6;max-height:300px;overflow-y:auto;">
+      <div class="ai-card-body" style="padding:16px;font-size:14px;color:#334155;line-height:1.6;max-height:500px;overflow-y:auto;">
         <div style="color:#94a3b8;font-style:italic;">Thinking...</div>
       </div>
     `;
@@ -372,8 +396,48 @@ class SelectionManager {
     document.body.appendChild(this.card);
 
     this.card.querySelector('.ai-card-close').onclick = () => this.card.remove();
+    
+    // --- 新增：解读按钮点击逻辑 ---
+    const btnExplain = this.card.querySelector('#ai-btn-explain');
+    btnExplain.onmouseover = () => btnExplain.style.backgroundColor = '#e2e8f0';
+    btnExplain.onmouseout = () => btnExplain.style.backgroundColor = 'transparent';
+    
+    btnExplain.onclick = () => {
+       // 1. 禁用按钮防止重复点击
+       btnExplain.disabled = true;
+       btnExplain.style.opacity = '0.5';
+       btnExplain.innerHTML = '<span>⏳</span> 解读中...';
+
+       // 2. 在内容区追加分割线和容器
+       const body = this.card.querySelector('.ai-card-body');
+       const separator = document.createElement('hr');
+       separator.style.margin = '16px 0';
+       separator.style.border = 'none';
+       separator.style.borderTop = '1px dashed #e2e8f0';
+       body.appendChild(separator);
+
+       const explainBox = document.createElement('div');
+       explainBox.style.fontSize = '13px';
+       explainBox.style.color = '#475569';
+       explainBox.style.backgroundColor = '#f8fafc';
+       explainBox.style.padding = '12px';
+       explainBox.style.borderRadius = '8px';
+       explainBox.innerHTML = '<span style="color:#94a3b8;font-style:italic;">正在深度解读...</span>';
+       body.appendChild(explainBox);
+       
+       // 滚动到底部
+       body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' });
+
+       // 3. 发起请求
+       if (typeof pageManager !== 'undefined') {
+          // 使用 'explain' 模式
+          pageManager.addDirectTask(this.selectionText, explainBox, settings.targetLang || 'zh', false, 'explain');
+       }
+    };
+
     this.setupCardDrag(this.card);
 
+    // 注意：默认精翻模式现在已经是 default，所以 precisionMode 参数其实没用了，但保持传参无害
     this.streamTranslate(this.selectionText, settings.targetLang || 'zh', settings.precisionMode, this.card.querySelector('.ai-card-body'));
   }
 
@@ -406,16 +470,17 @@ class SelectionManager {
   }
 
   streamTranslate(text, targetLang, precisionMode, outputEl) {
-    outputEl.textContent = '';
-    const port = chrome.runtime.connect({ name: "stream-translate" });
-    port.postMessage({ action: "TRANSLATE", text: text, targetLang: targetLang, mode: precisionMode ? 'precision' : 'fast' });
-    port.onMessage.addListener((msg) => {
-      if (msg.action === "CHUNK") outputEl.textContent += msg.content;
-      if (msg.action === "DONE" || msg.error) {
-        if (msg.error) outputEl.textContent = "Error: " + msg.error;
-        port.disconnect();
-      }
-    });
+    // 1. 初始化 loading 状态，不要直接清空
+    outputEl.innerHTML = '<div style="color:#94a3b8;font-style:italic;">Thinking...</div>';
+    
+    // ★★★ 改为通过 pageManager 统一调度 ★★★
+    // 这样能享收到全局限流(串行)和自动重试的好处
+    if (typeof pageManager !== 'undefined') {
+       pageManager.addDirectTask(text, outputEl, targetLang, precisionMode);
+    } else {
+       // fallback (理论上不会走到这)
+       console.error("TranslationManager not initialized");
+    }
   }
 }
 
@@ -436,6 +501,8 @@ function getLogicalBlock(node) {
   while (curr && curr !== document.body) {
     if (INVALID_TAGS.includes(curr.tagName)) return null;
     if (curr.getAttribute(TRANSLATION_MARK_ATTR)) return null; 
+    // ★★★ 新增：如果遇到 A 标签，直接将其作为独立容器 ★★★
+    if (curr.tagName === 'A') return curr;
     if (isBlockContainer(curr)) return curr;
     curr = curr.parentElement;
   }
@@ -443,7 +510,9 @@ function getLogicalBlock(node) {
 }
 
 function scanTranslatableElements() {
-  const blockMap = new Map(); 
+  const rawBlocks = []; 
+  let currentBlock = null;
+
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
       // 1. 基础过滤：排除空文本
@@ -469,16 +538,25 @@ function scanTranslatableElements() {
   while (currentNode = walker.nextNode()) {
     const container = getLogicalBlock(currentNode);
     if (!container) continue;
-    if (!blockMap.has(container)) blockMap.set(container, []);
-    blockMap.get(container).push(currentNode);
+
+    // ★★★ 核心修改：线性扫描，连续归组 ★★★
+    // 如果容器变化了，就开启新块。这样 A 标签（Link）会打断 P 标签，形成 P1 -> A -> P2 三个块
+    if (currentBlock && currentBlock.container === container) {
+       currentBlock.textNodes.push(currentNode);
+    } else {
+       currentBlock = { container: container, textNodes: [currentNode] };
+       rawBlocks.push(currentBlock);
+    }
   }
 
-  const blocks = [];
-  blockMap.forEach((textNodes, container) => {
-    if (textNodes.length > 500) return; 
-    const fullText = textNodes.map(n => n.nodeValue).join('').trim();
+  // --- 过滤与组装 ---
+  const validBlocks = [];
+  
+  rawBlocks.forEach(block => {
+    if (block.textNodes.length > 500) return; 
+    const fullText = block.textNodes.map(n => n.nodeValue).join('').trim();
     
-    // --- 【加强版过滤逻辑】 ---
+    // --- 【过滤逻辑】 ---
 
     // 1. 长度太短的跳过 (小于2个字符通常是无意义的，除非是中文)
     if (fullText.length < 2 && !/[\u4e00-\u9fa5]/.test(fullText)) return;
@@ -503,17 +581,19 @@ function scanTranslatableElements() {
     if (/^[a-z]+[A-Z][a-zA-Z0-9]*$/.test(fullText) && fullText.length < 30) return;
     if (/^[a-z]+_[a-z0-9_]+$/.test(fullText) && fullText.length < 30) return;
 
-    blocks.push({ container: container, textNodes: textNodes, originalText: fullText });
+    validBlocks.push({ container: block.container, textNodes: block.textNodes, originalText: fullText });
   });
 
-  return blocks;
+  return validBlocks;
 }
 
 class TranslationManager {
   constructor() {
     this.queue = [];
     this.activeCount = 0;
-    this.concurrency = 6; // 高并发
+    this.activeCount = 0;
+    this.concurrency = 15; // 极速模式 (风险：容易触发429)
+    this.settings = {};
     this.settings = {}; 
     this.BATCH_DELIMITER = "|||"; // 强壮的分隔符
   }
@@ -570,7 +650,26 @@ class TranslationManager {
       }
       transUi.textContent = '...'; 
       transUi.style.color = '#94a3b8';
-      block.container.appendChild(transUi);
+
+      // ★★★ 核心修改：插入位置 (UI Insertion) ★★★
+      // 不再简单的 appendChild，而是插在最后一个文本节点后面 (Look-preserving)
+      // 如果 container 是 A 标签，这样会插在 A 标签里面，链接依然有效
+      // 如果 container 是 P，被拆分成了 P1-A-P2，那么 P1 的翻译插在 P1 末尾，A 插在 A 里面，P2 插在 P2 末尾。
+      const lastNode = block.textNodes[block.textNodes.length - 1];
+      // 注意：lastNode 已经被 wrap 进 span 了，所以要找 span 的后面
+      // 如果 span 插入成功了，lastNode.parentNode 就是 span
+      if (lastNode && lastNode.parentElement && lastNode.parentElement.tagName === 'SPAN') {
+         const wrapperSpan = lastNode.parentElement;
+         if (wrapperSpan.nextSibling) {
+            wrapperSpan.parentNode.insertBefore(transUi, wrapperSpan.nextSibling);
+         } else {
+            wrapperSpan.parentNode.appendChild(transUi);
+         }
+      } else {
+         // Fallback
+         block.container.appendChild(transUi);
+      }
+      
       block.container.setAttribute(TRANSLATION_MARK_ATTR, 'true');
 
       // 3. 加入原始任务队列
@@ -614,30 +713,45 @@ class TranslationManager {
 
   // 辅助：打包入队
   pushBatchTask(batchItems, isPriority, traceId) {
-    if (!batchItems || batchItems.length === 0) return;
+    if(!batchItems.length) return;
     
-    let taskItem;
-    if (batchItems.length === 1) {
-      taskItem = batchItems[0];
-    } else {
-      const combinedText = batchItems.map(item => item.text).join(' ||| ');
-      taskItem = {
-        type: 'batch', 
-        items: batchItems, 
-        text: combinedText,
-        targetLang: batchItems[0].targetLang,
-        mode: 'fast' 
-      };
-    }
-
-    // ★★★ 关键：把身份证贴在任务上 ★★★
-    taskItem.traceId = traceId; 
+    // 构造 batch 任务文本 "A ||| B ||| C"
+    const combinedText = batchItems.map(i => i.text).join(" " + this.BATCH_DELIMITER + " ");
+    
+    const task = {
+      type: 'batch',
+      text: combinedText,
+      items: batchItems, // 这是一个数组 [{ui, text}, ...]
+      targetLang: batchItems[0].targetLang, // 取第一个的配置即可
+      mode: batchItems[0].mode,
+      traceId: traceId,
+      retryCount: 0 // 初始化重试次数
+    };
 
     if (isPriority) {
-      this.queue.unshift(taskItem);
+      this.queue.unshift(task); // 插队
     } else {
-      this.queue.push(taskItem);
+      this.queue.push(task);
     }
+    
+    this.processQueue();
+  }
+
+  // ★★★ 新增：直接添加卡片任务 (Card Task) ★★★
+  addDirectTask(text, outputEl, targetLang, precisionMode, modeOverride = null) {
+     const task = {
+       type: 'card', // 特殊类型
+       text: text,
+       ui: outputEl,
+       targetLang: targetLang,
+       // 如果有 override (比如 'explain') 则优先使用，否则看 precisionMode
+       mode: modeOverride ? modeOverride : (precisionMode ? 'precision' : 'fast'),
+       retryCount: 0 // 初始化重试次数
+     };
+     
+     // 卡片翻译优先级最高，直接插队到最前面
+     this.queue.unshift(task);
+     this.processQueue();
   }
 
   processQueue() {
@@ -665,8 +779,10 @@ class TranslationManager {
       this.processQueue();
       return;
     }
-
     
+    // 初始化重试计数
+    if (task.retryCount === undefined) task.retryCount = 0;
+
     this.activeCount++;
     
     // UI 初始化
@@ -680,12 +796,17 @@ class TranslationManager {
 
     const port = chrome.runtime.connect({ name: "stream-translate" });
     let accumulatedText = ""; 
+    let hasError = false; // 标记是否发生错误
     
     port.onDisconnect.addListener(() => {
-      setTimeout(() => {
-        this.activeCount--;
-        this.processQueue();
-      }, 1000); 
+      // 只有在非重试的情况下才减少 activeCount 并继续队列
+      // 如果正在重试 wait 期间，不要减少
+      if (!task.isRetrying) {
+        setTimeout(() => {
+           this.activeCount--;
+           this.processQueue();
+        }, 1000);
+      }
     });
 
     // ★★★ 关键：把身份证带在请求上 ★★★
@@ -706,14 +827,47 @@ class TranslationManager {
         }
       }
       else if (msg.action === "DONE" || msg.error) {
-         // --- 兜底回退机制 ---
          if (msg.error) { 
            console.error("API Error:", msg.error);
+           hasError = true;
+
+           // --- 429 自动重试逻辑 ---
+           const isRateLimit = msg.error.includes("429") || msg.error.includes("concurrency") || msg.error.includes("limit") || msg.error.includes("并发");
+           if (isRateLimit && task.retryCount < 3) {
+              console.warn(`[AI翻译] 触发限流 (429)，准备第 ${task.retryCount + 1} 次重试...`);
+              
+              task.retryCount++;
+              task.isRetrying = true; // 标记正在重试状态
+              
+              // 随机退避 2s - 5s
+              const backoff = 2000 + Math.random() * 3000;
+              
+              setTimeout(() => {
+                 this.activeCount--; // 释放占用
+                 task.isRetrying = false;
+                 // 重新入队头部，优先重试
+                 this.queue.unshift(task);
+                 this.processQueue();
+              }, backoff);
+              
+              port.disconnect();
+              return; // ★ 阻断后续报错流程
+           }
+           
+           // 非429或重试耗尽，显示错误
            const applyError = (item, original) => {
              if(item.ui) {
-               item.ui.textContent = original; // 回填原文
-               item.ui.title = "翻译失败: " + msg.error;
-               item.ui.style.borderBottom = "2px solid red";
+               // 特殊处理：如果是卡片任务，显示富文本报错
+               if (task.type === 'card') {
+                 item.ui.innerHTML = `<div style="color:#ef4444; padding:8px 0;">
+                   <strong>Error:</strong> ${msg.error}
+                   <div style="font-size:12px; margin-top:4px; color:#64748b;">请检查 API Key 或模型名称是否正确</div>
+                 </div>`;
+               } else {
+                 item.ui.textContent = original; // 回填原文
+                 item.ui.title = "翻译失败: " + msg.error;
+                 item.ui.style.borderBottom = "2px solid red";
+               }
              }
            };
 
@@ -740,11 +894,7 @@ class TranslationManager {
          }
          
          port.disconnect();
-         const delay = msg.error ? 2000 : 0;
-         setTimeout(() => {
-           this.activeCount--;
-           this.processQueue();
-         }, delay);
+         // 注意：Disconnect listener 会处理 activeCount--，这里不用管
       }
     });
   }
