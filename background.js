@@ -4,13 +4,16 @@ const CACHE_LIMIT = 500;
 const CACHE_MAX_LENGTH = 100;
 const DEFAULT_PROVIDER = "deepseek";
 
+const BUILTIN_PROXY_URL = "https://1317980685-d62rkq4tfd.ap-guangzhou.tencentscf.com";
+const BUILTIN_PROXY_MODEL = "glm-4-flash";
+
 const PROVIDER_DEFAULTS = {
   deepseek:    { url: "https://api.deepseek.com/chat/completions", model: "deepseek-chat" },
   moonshot:    { url: "https://api.moonshot.cn/v1/chat/completions", model: "kimi-k2-turbo-preview" },
   siliconflow: { url: "https://api.siliconflow.cn/v1/chat/completions", model: "deepseek-ai/DeepSeek-V3" },
   qwen:        { url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen-turbo" },
   zhipu:       { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "glm-4-plus" },
-  zhipu_free:  { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "glm-4-flash" },
+  zhipu_free:  { url: BUILTIN_PROXY_URL, model: BUILTIN_PROXY_MODEL, isBuiltin: true },
   custom:      { url: "", model: "" }
 };
 
@@ -47,36 +50,45 @@ chrome.runtime.onConnect.addListener((port) => {
       const settings = await chrome.storage.local.get(['apiKey', 'apiUrl', 'modelName', 'provider']);
       const apiKey = settings.apiKey;
       const provider = settings.provider || DEFAULT_PROVIDER;
+      const defaults = PROVIDER_DEFAULTS[provider] || PROVIDER_DEFAULTS['deepseek'];
+      const isBuiltin = !!defaults.isBuiltin;
 
-      if (!apiKey && provider !== 'custom') {
+      if (!apiKey && !isBuiltin && provider !== 'custom') {
         throw new Error("请点击插件图标配置 API Key");
       }
 
-      const defaults = PROVIDER_DEFAULTS[provider] || PROVIDER_DEFAULTS['deepseek'];
-      const apiUrl = settings.apiUrl || defaults.url;
-      const model = settings.modelName || defaults.model;
+      let apiUrl, model;
+      if (isBuiltin) {
+        apiUrl = defaults.url;
+        model = defaults.model;
+      } else {
+        apiUrl = settings.apiUrl || defaults.url;
+        model = settings.modelName || defaults.model;
+      }
 
       const isBatch = text.includes("|||");
       const systemPrompt = buildSystemPrompt(targetLang, mode, isBatch);
 
       const headers = { "Content-Type": "application/json" };
-      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+      if (apiKey && !isBuiltin) headers["Authorization"] = `Bearer ${apiKey}`;
+
+      const requestBody = {
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: text }
+        ],
+        stream: true,
+        temperature: 0.3
+      };
+      if (!isBuiltin) requestBody.frequency_penalty = 0.5;
 
       const response = await fetch(apiUrl, {
         method: "POST",
         headers,
         mode: "cors",
         credentials: 'omit',
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: text }
-          ],
-          stream: true,
-          temperature: 0.3,
-          frequency_penalty: 0.5
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {

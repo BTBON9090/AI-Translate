@@ -120,7 +120,9 @@ input:checked + .slider:before { transform: translateX(16px); }
 }
 #api-key { padding-right: 64px; }
 .model-select-wrapper input { padding-right: 86px; }
+.model-select-wrapper input:disabled { padding-right: 10px; }
 .input-wrapper input:focus { border-color: var(--primary); outline: none; }
+.input-wrapper input:disabled { background: #f1f5f9; color: #64748b; cursor: not-allowed; }
 .icon-group {
   position: absolute; right: 8px; top: 0; height: 100%;
   display: flex; align-items: center; gap: 2px; z-index: 5; pointer-events: none;

@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tipsModelFetching: "正在获取模型列表...",
       tipsModelFetched: "已获取 {{count}} 个模型 · 可手动输入",
       tipsModelFetchError: "获取失败，使用推荐模型 · 可手动输入",
+      tipsModelBuiltin: "✨ 内置免费模型，无需配置 API Key，开箱即用",
       dropdownEmpty: "暂无可用模型"
     },
     en: {
@@ -30,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tipsModelFetching: "Fetching model list...",
       tipsModelFetched: "{{count}} models fetched · Type to customize",
       tipsModelFetchError: "Fetch failed, using recommended models · Type to customize",
+      tipsModelBuiltin: "✨ Built-in free model, no API Key needed",
       dropdownEmpty: "No models available"
     }
   };
@@ -68,8 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
     zhipu_free:  {
       url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
       model: "glm-4-flash",
-      modelsUrl: "https://open.bigmodel.cn/api/paas/v4/models",
-      commonModels: ["glm-4-flash", "glm-4-flashx"]
+      modelsUrl: "",
+      commonModels: ["glm-4-flash"],
+      isBuiltin: true
     },
     custom:      {
       url: "", model: "", modelsUrl: "", commonModels: []
@@ -147,7 +150,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (els.apiTips) els.apiTips.textContent = t.tipsKey;
     if (els.lblProvider) els.lblProvider.textContent = t.lblProvider;
     if (els.lblModelName) els.lblModelName.textContent = t.lblModelName;
-    updateModelTips(t.tipsModel);
+    const curProvider = els.providerSelect ? els.providerSelect.value : '';
+    const curConfig = PROVIDERS[curProvider];
+    if (curConfig && curConfig.isBuiltin) {
+      updateModelTips(t.tipsModelBuiltin || '✨ 内置免费模型，无需配置 API Key', 'success');
+    } else {
+      updateModelTips(t.tipsModel);
+    }
     const isRestoring = els.mainBtn && els.mainBtn.classList.contains('restoring');
     if (els.btnText) els.btnText.textContent = isRestoring ? t.btnRestore : t.btnTrans;
     chrome.storage.local.get(['modelName', 'provider'], (res) => {
@@ -268,10 +277,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state) els.refreshModelsBtn.classList.add(state);
   }
 
-  function updateModelTips(text, isError) {
+  function updateModelTips(text, state) {
     if (!els.tipsModel) return;
     els.tipsModel.textContent = text;
-    els.tipsModel.style.color = isError ? '#ef4444' : '';
+    if (state === 'success') {
+      els.tipsModel.style.color = '#10b981';
+    } else if (state === true || state === 'error') {
+      els.tipsModel.style.color = '#ef4444';
+    } else {
+      els.tipsModel.style.color = '';
+    }
   }
 
   async function fetchModelsFromAPI(provider) {
@@ -333,7 +348,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyProviderChange(provider, preserveModel) {
     const config = PROVIDERS[provider] || PROVIDERS['deepseek'];
+    const isBuiltin = !!config.isBuiltin;
     hideModelDropdown();
+
     if (provider === 'custom') {
       if (els.customUrl && !preserveModel) els.customUrl.value = "";
       if (els.customModel && !preserveModel) els.customModel.value = "";
@@ -345,11 +362,31 @@ document.addEventListener('DOMContentLoaded', () => {
       if (els.customUrlRow) els.customUrlRow.classList.add('hidden');
       populateModelDatalist(config.commonModels || []);
     }
+
     if (els.modelNameRow) els.modelNameRow.classList.remove('hidden');
-    if (els.apiKey) els.apiKey.disabled = false;
+
+    if (isBuiltin) {
+      if (els.apiPanel) els.apiPanel.classList.add('hidden');
+      if (els.toggleApi) els.toggleApi.classList.remove('active');
+      if (els.apiKey) { els.apiKey.disabled = true; els.apiKey.value = ''; }
+      if (els.customModel) els.customModel.disabled = true;
+      if (els.modelDropdownBtn) els.modelDropdownBtn.style.display = 'none';
+      if (els.refreshModelsBtn) els.refreshModelsBtn.style.display = 'none';
+      const modelClearBtn = document.querySelector('.clear-btn[data-target="custom-model-name"]');
+      if (modelClearBtn) modelClearBtn.classList.remove('visible');
+    } else {
+      if (els.apiKey) els.apiKey.disabled = false;
+      if (els.customModel) els.customModel.disabled = false;
+      if (els.modelDropdownBtn) els.modelDropdownBtn.style.display = '';
+      if (els.refreshModelsBtn) els.refreshModelsBtn.style.display = '';
+    }
 
     const t = i18n[currentUiLang] || i18n['zh'];
-    updateModelTips(t.tipsModel || '留空则使用服务商默认模型 · 点击 ▾ 选择或 ↻ 刷新');
+    if (isBuiltin) {
+      updateModelTips(t.tipsModelBuiltin || '内置免费模型，无需配置 API Key', 'success');
+    } else {
+      updateModelTips(t.tipsModel || '留空则使用默认模型 · 点击 ▾ 选择或 ↻ 刷新');
+    }
   }
 
   chrome.storage.local.get(
@@ -359,17 +396,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (els.providerSelect) els.providerSelect.value = currentProvider;
       if (els.apiKey) els.apiKey.value = res.apiKey || '';
 
-      if (!res.apiKey && currentProvider !== 'custom' && els.apiPanel) {
+      const initConfig = PROVIDERS[currentProvider];
+      const initIsBuiltin = initConfig && initConfig.isBuiltin;
+
+      if (!res.apiKey && currentProvider !== 'custom' && !initIsBuiltin && els.apiPanel) {
         els.apiPanel.classList.remove('hidden');
         if (els.toggleApi) els.toggleApi.classList.add('active');
       }
 
-      const savedModelName = res.modelName || '';
-      const savedApiUrl = res.apiUrl || '';
+      const savedModelName = initIsBuiltin ? '' : (res.modelName || '');
+      const savedApiUrl = initIsBuiltin ? '' : (res.apiUrl || '');
       applyProviderChange(currentProvider, true);
 
       if (els.customUrl) els.customUrl.value = savedApiUrl || (PROVIDERS[currentProvider] ? PROVIDERS[currentProvider].url : '');
-      if (els.customModel) els.customModel.value = savedModelName || (PROVIDERS[currentProvider] ? PROVIDERS[currentProvider].model : '');
+      if (els.customModel) els.customModel.value = initIsBuiltin ? (PROVIDERS[currentProvider].model) : (savedModelName || (PROVIDERS[currentProvider] ? PROVIDERS[currentProvider].model : ''));
       if (els.targetLang && res.targetLang) els.targetLang.value = res.targetLang;
       if (els.bilingualMode) els.bilingualMode.checked = res.bilingualMode !== false;
       if (els.transStyle) els.transStyle.value = res.transStyle || 'minimal';
@@ -379,7 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleStyleRow(els.bilingualMode && els.bilingualMode.checked);
       updateModelSubtitle(savedModelName, currentProvider);
 
-      if (currentProvider !== 'custom' && PROVIDERS[currentProvider] && PROVIDERS[currentProvider].modelsUrl) {
+      if (currentProvider !== 'custom' && !initIsBuiltin && PROVIDERS[currentProvider] && PROVIDERS[currentProvider].modelsUrl) {
         fetchModelsFromAPI(currentProvider);
       }
 
@@ -462,19 +502,32 @@ document.addEventListener('DOMContentLoaded', () => {
   if (els.providerSelect) {
     els.providerSelect.addEventListener('change', (e) => {
       const newProvider = e.target.value;
+      const config = PROVIDERS[newProvider];
       applyProviderChange(newProvider);
-      if (newProvider !== 'custom' && PROVIDERS[newProvider] && PROVIDERS[newProvider].modelsUrl) {
+      if (newProvider !== 'custom' && config && config.modelsUrl && !config.isBuiltin) {
         fetchModelsFromAPI(newProvider);
       }
       if (els.customModel) els.customModel.dispatchEvent(new Event('input'));
       if (els.customUrl) els.customUrl.dispatchEvent(new Event('input'));
+
+      if (config && config.isBuiltin) {
+        chrome.storage.local.set({
+          provider: newProvider,
+          apiKey: '',
+          apiUrl: '',
+          modelName: ''
+        }, () => {
+          updateModelSubtitle(config.model, newProvider);
+        });
+      }
     });
   }
 
   if (els.refreshModelsBtn) {
     els.refreshModelsBtn.addEventListener('click', () => {
       const provider = els.providerSelect ? els.providerSelect.value : 'deepseek';
-      if (provider !== 'custom') {
+      const config = PROVIDERS[provider];
+      if (provider !== 'custom' && config && config.modelsUrl && !config.isBuiltin) {
         fetchModelsFromAPI(provider);
       }
     });
@@ -513,12 +566,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!modelName) modelName = PROVIDERS[provider].model;
       }
 
+      const pConfig = PROVIDERS[provider];
+      const pIsBuiltin = pConfig && pConfig.isBuiltin;
+
       chrome.storage.local.set({ apiKey: key, provider, apiUrl, modelName }, () => {
         const oldText = els.saveKeyBtn.textContent;
         els.saveKeyBtn.textContent = i18n[currentUiLang].btnSaved;
         els.saveKeyBtn.classList.add('saved');
         updateModelSubtitle(modelName, provider);
-        if (provider !== 'custom' && PROVIDERS[provider] && PROVIDERS[provider].modelsUrl) {
+        if (!pIsBuiltin && provider !== 'custom' && pConfig && pConfig.modelsUrl) {
           fetchModelsFromAPI(provider);
         }
         setTimeout(() => {
