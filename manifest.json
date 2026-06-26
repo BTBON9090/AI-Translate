@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AI Minimal Translator",
-  "version": "1.0.0",
-  "description": "基于 DeepSeek 的极简网页翻译插件，支持流式输出与沉浸式阅读。",
+  "name": "AI 极简翻译",
+  "version": "1.5.0",
+  "description": "极简网页翻译插件，支持多服务商、流式输出、双语对照与沉浸式阅读。",
   "permissions": [
     "storage",          
     "activeTab",

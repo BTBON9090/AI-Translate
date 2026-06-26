@@ -8,36 +8,26 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- 顶部导航 -->
     <header>
       <div class="brand">
         <span class="logo-icon">🌐</span>
-        <h1 id="app-title">AI 精简翻译</h1>
+        <h1 id="app-title">AI 极简翻译</h1>
       </div>
-      
-      <div class="header-controls" style="display:flex; align-items:center; gap:8px;">
-        <!-- 语言切换按钮 -->
-        <div id="lang-toggle" class="lang-btn">CN/EN</div>
-        <div class="status-indicator ready" id="status-badge">Ready</div>
+      <div class="header-controls">
+        <div id="lang-toggle" class="lang-btn">EN</div>
+        <div class="status-indicator" id="status-badge">就绪</div>
       </div>
     </header>
 
-    <!-- 核心操作区 -->
     <main>
-      <!-- 主按钮 -->
       <button id="main-action-btn" class="action-btn">
-        <!-- <span class="btn-icon">✨</span> -->
-        <!-- 使用 div 包裹主标题和副标题 -->
         <div class="btn-content-col">
           <span class="btn-text">翻译当前页面</span>
-          <!-- 问题5：新增副标题用于回显模型名称 -->
           <span id="btn-model-display" class="btn-subtitle">Model: DeepSeek</span>
         </div>
       </button>
 
-      <!-- 设置卡片 -->
       <div class="settings-card">
-        <!-- 目标语言 -->
         <div class="setting-item">
           <label id="lbl-target-main">目标语言</label>
           <select id="target-lang" class="modern-select">
@@ -62,16 +52,13 @@
             <option value="ms">Bahasa Melayu</option>
             <option value="ar">العربية</option>
             <option value="hi">हिन्दी</option>
-            <option value="tr">Türkçe</option>
-            <option value="ru">Русский</option>
           </select>
         </div>
 
-        <!-- 新增：始终翻译当前网站 -->
         <div class="setting-item">
-          <label style="display:flex; flex-direction:column;">
+          <label>
             <span id="lbl-auto-main">始终翻译此网站</span>
-            <span id="current-host" style="font-size:10px; color:#94a3b8; font-weight:400;">Current Site</span>
+            <span id="current-host" class="sub-label">—</span>
           </label>
           <label class="switch">
             <input type="checkbox" id="auto-translate-site">
@@ -79,16 +66,14 @@
           </label>
         </div>
 
-        <!-- 双语模式开关 -->
         <div class="setting-item">
-          <label for="bilingual-mode" id="lbl-bi-mode">双语对照模式</label>
+          <label for="bilingual-mode" id="lbl-bi-mode">双语对照</label>
           <label class="switch">
             <input type="checkbox" id="bilingual-mode">
             <span class="slider"></span>
           </label>
         </div>
 
-        <!-- 双语样式选择 (仅在双语开启时显示) -->
         <div class="setting-item sub-setting" id="style-setting-row">
           <label id="lbl-style">对照样式</label>
           <select id="trans-style" class="modern-select">
@@ -97,9 +82,6 @@
           </select>
         </div>
 
-        <!-- 精翻模式已移除 (默认开启) -->
-
-        <!-- 悬浮球开关 -->
         <div class="setting-item">
           <label for="show-bubble" id="lbl-bubble">悬浮球入口</label>
           <label class="switch">
@@ -107,142 +89,95 @@
             <span class="slider"></span>
           </label>
         </div>
-
-        <div class="setting-item" style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px; display: none;">
-          <label style="color:#64748b; font-size:12px;">觉得好用？</label>
-          <a href="https://你的Chrome商店详情页链接" target="_blank" style="text-decoration:none;">
-            <button style="
-              background: #f1f5f9; 
-              color: #334155; 
-              border: 1px solid #cbd5e1; 
-              padding: 6px 12px; 
-              border-radius: 6px; 
-              font-size: 12px; 
-              cursor: pointer; 
-              display: flex; 
-              align-items: center; 
-              gap: 5px;
-              transition: all 0.2s;
-            " onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
-              <span>⭐️</span> 给个好评
-            </button>
-          </a>
-        </div>
       </div>
 
-      <!-- API 配置折叠区 -->
       <div class="api-section">
         <div class="accordion-header" id="toggle-api">
-          <!-- 修改 1：给 span 加上 id -->
-          <span id="lbl-api-header">🔑 DeepSeek API 配置</span>
+          <span id="lbl-api-header">🔑 模型 API 配置</span>
           <svg class="chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
         <div class="accordion-content hidden" id="api-panel">
-          
-          <!-- 模型服务商 -->
-          <div class="setting-item stacked" style="border:none; padding-bottom:0;">
+          <div class="setting-item stacked">
             <label id="lbl-provider">模型服务商</label>
-            <!-- 修改后的 provider-select -->
             <select id="provider-select" class="modern-select full-width-select">
               <option value="deepseek">✨ DeepSeek 官方</option>
               <option value="moonshot">🌙 Kimi 官方</option>
-              <option value="siliconflow">🚀 硅基流动 (SiliconFlow)</option>
-              <option value="qwen">🟣 通义千问 (Qwen)</option>
-              <option value="zhipu">🎓 智谱 GLM-4-Flash (免费)</option>
-              <option value="zhipu_47_flash_x">🎓 智谱 GLM-4.7-FlashX (New)</option>
-              <option value="zhipu_47_flash">🎓 智谱 GLM-4.7-Flash</option>
-              <option value="openai">🤖 OpenAI (GPT-4o)</option>
-              <option value="groq">⚡️ Groq</option>
-              <option value="openrouter">🌐 OpenRouter</option>
-              <option value="ollama">🏠 Ollama (本地)</option>
-              <option value="custom">⚙️ 自定义 (Custom)</option>
+              <option value="siliconflow">🚀 硅基流动</option>
+              <option value="qwen">🟣 通义千问</option>
+              <option value="zhipu">🎓 智谱 GLM</option>
+              <option value="zhipu_free">🎓 智谱 GLM 免费版</option>
+              <option value="custom">⚙️ 自定义</option>
             </select>
           </div>
 
-          <!-- 自定义参数区 -->
-          <div id="custom-options" class="hidden" style="margin-top:10px; margin-bottom:12px; background:#f8fafc; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
-            <div style="margin-bottom:8px;">
-              <label style="font-size:11px; color:#64748b;">API URL</label>
+          <div id="custom-options" class="custom-options">
+            <div class="custom-field" id="model-name-row">
+              <label id="lbl-model-name">模型名称</label>
+              <div class="input-wrapper model-select-wrapper">
+                <input type="text" id="custom-model-name" placeholder="e.g. deepseek-chat" autocomplete="off">
+                <div class="icon-group">
+                  <div class="icon-btn model-dropdown-btn" id="model-dropdown-btn" title="选择模型">▾</div>
+                  <div class="icon-btn refresh-models-btn" id="refresh-models-btn" title="刷新模型列表">↻</div>
+                  <div class="icon-btn clear-btn" data-target="custom-model-name">✕</div>
+                </div>
+                <div class="model-dropdown hidden" id="model-dropdown"></div>
+              </div>
+              <div class="field-tips" id="tips-model-name">留空则使用默认模型 · 点击 ▾ 选择或 ↻ 刷新</div>
+            </div>
+            <div class="custom-field hidden" id="custom-url-row">
+              <label>API URL</label>
               <div class="input-wrapper">
                 <input type="text" id="custom-api-url" placeholder="https://...">
                 <div class="icon-group">
-                  <!-- 加上 icon-btn 类 -->
                   <div class="icon-btn clear-btn" data-target="custom-api-url">✕</div>
                 </div>
               </div>
             </div>
-            <div>
-              <label style="font-size:11px; color:#64748b;">Model Name</label>
-              <div class="input-wrapper">
-                <input type="text" id="custom-model-name" placeholder="e.g. gpt-4">
-                <div class="icon-group">
-                  <!-- 加上 icon-btn 类 -->
-                  <div class="icon-btn clear-btn" data-target="custom-model-name">✕</div>
-                </div>
-              </div>
-            </div>
           </div>
 
-          <!-- API Key 输入框 (确保结构完全一致) -->
-          <div class="input-group" style="margin-top:10px; margin-bottom: 8px;">
+          <div class="api-key-area">
             <div class="input-wrapper">
               <input type="password" id="api-key" placeholder="sk-..." autocomplete="off">
               <div class="icon-group">
-                <!-- 加上 icon-btn 类，使用 ✕ 符号比 X 更像图标 -->
                 <div class="icon-btn clear-btn" data-target="api-key">✕</div>
-                <!-- 加上 icon-btn 和 eye-btn 类 -->
                 <div class="icon-btn eye-btn" id="toggle-visibility">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 </div>
               </div>
             </div>
+            <div class="api-tips" id="lbl-api-tips">Key 仅保存在本地，不会上传服务器。</div>
+            <button id="save-key-btn" class="save-btn">保存配置</button>
           </div>
-          
-          <div class="api-tips" id="lbl-api-tips">Key 仅保存在本地，直接请求 API 厂商。</div>
-          <button id="save-key-btn" class="save-btn">保存配置</button>
-        </div>
-      </div> 
-      
-      <!-- 小红书 & 打赏卡片 -->
-      <div class="xhs-card">
-        <!-- 左侧文案 -->
-        <div class="xhs-text">
-            <div class="xhs-title">✨ 关注 & 支持作者</div>
-            <div class="xhs-desc">获取更新动态和跟多功能<br>or...请我喝杯奶茶提提神 🥤</div>
-        </div>
-
-        <!-- 右侧图标组 -->
-        <div class="xhs-icons">
-            
-            <!-- 1. 小红书关注 -->
-            <div class="qr-wrapper">
-                <div class="icon-btn-circle" title="关注小红书">📕</div>
-                <!-- 悬浮二维码 -->
-                <div class="qr-tooltip">
-                    <img src="/images/xhs_qr.png" class="qr-img" alt="小红书二维码">
-                    <div class="qr-desc">扫码关注获取更新</div>
-                </div>
-            </div>
-
-            <!-- 2. 打赏 -->
-            <div class="qr-wrapper">
-                <div class="icon-btn-circle" title="打赏一杯奶茶">💰</div>
-                <!-- 悬浮二维码 -->
-                <div class="qr-tooltip">
-                    <img src="/images/pay_qr.png" class="qr-img" alt="收款码">
-                    <div class="qr-desc">阖家欢乐 恭喜发财 谢谢老板</div>
-                </div>
-            </div>
-
         </div>
       </div>
 
-      <!-- 版权底部 -->
+      <div class="xhs-card">
+        <div class="xhs-text">
+          <div class="xhs-title">✨ 关注 & 支持作者</div>
+          <div class="xhs-desc">获取更新动态和更多功能</div>
+        </div>
+        <div class="xhs-icons">
+          <div class="qr-wrapper">
+            <div class="icon-btn-circle" title="关注小红书">📕</div>
+            <div class="qr-tooltip">
+              <img src="/images/xhs_qr.png" class="qr-img" alt="小红书二维码">
+              <div class="qr-desc">扫码关注获取更新</div>
+            </div>
+          </div>
+          <div class="qr-wrapper">
+            <div class="icon-btn-circle" title="打赏一杯奶茶">💰</div>
+            <div class="qr-tooltip">
+              <img src="/images/pay_qr.png" class="qr-img" alt="收款码">
+              <div class="qr-desc">谢谢老板</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <footer class="app-footer">
         <div>AI Translator v1.0.0</div>
-        <div>&copy; 2026.0110 BTBONN. All rights reserved.</div>
+        <div>&copy; 2026 BTBONN</div>
       </footer>
-
     </main>
   </div>
   <script src="popup.js"></script>

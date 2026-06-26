@@ -1,33 +1,8 @@
-/*
- * ==========================================================================
- * ⚠️ 版权声明 (Copyright Notice)
- * ==========================================================================
- * 
- * 本软件由 [BTBONN，倪城，nc0032@qq.com] 开发，受著作权法保护。
- * Copyright (c) 2024 [BTBONN，倪城，nc0032@qq.com]. All Rights Reserved.
- * 
- * 1. 授权范围：
- *    本软件仅供购买者个人使用。未经作者书面许可，严禁任何形式的
- *    复制、分发、破解、反编译或用于其他商业用途。
- * 
- * 2. 法律后果：
- *    擅自传播或修改本软件代码将构成侵权，作者保留追究法律责任的权利。
- * 
- * 3. 获取正版：
- *    获取更新或技术支持，请关注小红书作者：[BTBONN]
- *    小红书主页：https://www.xiaohongshu.com/user/profile/6252abd90000000010006abc?xsec_token=YB0uWUekOh2DpxdAhPqp-lvOau79DgGu2Xlp61H5MS4oY%3D&xsec_source=app_share&xhsshare=&shareRedId=ODg3MkRHSEI2NzUyOTgwNjczOTc6RkhM&apptime=1768037777&share_id=246ee3c596344bf59484ffc52815aa59&share_channel=copy_link
- * 
- * ==========================================================================
- */
-// --- START OF FILE background.js ---
-console.log("如果你也喜欢这个插件，请关注作者小红书【BTBONN】获取最新模型配置与更新动态。");
-/* ==============================================
-   模块 1: 全局变量与初始化
-   ============================================== */
+// --- START OF FILE content.js ---
 console.log("AI Minimal Translator: Content Script Loaded");
 
 const TRANSLATION_MARK_ATTR = 'data-ai-translated';
-const ORIGIN_MARK_ATTR = 'data-ai-origin'; 
+const ORIGIN_MARK_ATTR = 'data-ai-origin';
 const ICON_SVG = `<svg class="ai-icon-svg" viewBox="0 0 24 24"><path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>`;
 
 let isTranslating = false; 
@@ -39,89 +14,62 @@ function init() {
     checkAutoTranslate();
   });
   
-  // --- 划词功能重新实例化 ---
-  new SelectionManager(); 
-  
-  // --- 启动动态内容监听 ---
+  new SelectionManager();
+
   setupMutationObserver();
 
-  // --- 监听 SPA 跳转 ---
+  // SPA 跳转检测
   setInterval(() => {
     if (window.location.href !== lastUrl) {
-      console.log("AI翻译: 检测到页面跳转 (SPA)");
       lastUrl = window.location.href;
       handleUrlChange();
     }
   }, 1000);
 
-  // --- 页面唤醒监听 (防后台偷跑优化) ---
+  // 页面唤醒时继续处理队列
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTranslating && pageManager) {
-      console.log("页面唤醒，继续处理翻译队列...");
       pageManager.processQueue();
     }
   });
 }
 
-// --- [修改] SPA 跳转处理 ---
 function handleUrlChange() {
-  console.log("正在处理 SPA 跳转清理...");
-  
-  // 1. 强制关闭并清理当前页面的翻译垃圾
-  // 注意：这里不要直接设 isTranslating = false，而是调用清理函数
-  if (isTranslating) {
-    disablePageTranslation(); 
-  }
-  
-  // 2. 重新初始化检测
-  // Medium 跳转后内容加载较慢，建议多检测几次或延长时间
-  setTimeout(() => {
-    checkAutoTranslate();
-  }, 1000);
-  
-  // 双重保险：有的 SPA 渲染很慢，3秒后再查一次
-  setTimeout(() => {
-    checkAutoTranslate();
-  }, 3000);
+  if (isTranslating) disablePageTranslation();
+  setTimeout(checkAutoTranslate, 1000);
+  setTimeout(checkAutoTranslate, 3000);
 }
 
 function checkAutoTranslate() {
   chrome.storage.local.get(['autoSites'], (result) => {
     const currentHost = window.location.hostname;
     const autoSites = result.autoSites || [];
-    
-    if (autoSites.includes(currentHost)) {
-      console.log("AI翻译: 触发自动翻译 ->", currentHost);
-      if (!isTranslating) {
-         togglePageTranslation();
-      }
+    if (autoSites.includes(currentHost) && !isTranslating) {
+      togglePageTranslation();
     }
   });
 }
 
-// --- [修改] 动态监听 ---
+// 防抖定时器（闭包私有，避免 this 指向问题）
+let mutationDebounceTimer = null;
+
 function setupMutationObserver() {
   const observer = new MutationObserver((mutations) => {
-    if (document.hidden) return;
-    if (!isTranslating) return; // 没开启翻译就不管
+    if (document.hidden || !isTranslating) return;
 
     let hasMeaningfulChange = false;
     for (const mutation of mutations) {
       if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
         for (const node of mutation.addedNodes) {
-          if (node.nodeType === 1) { 
-             // ... (这里保留你原来的排除逻辑: SCRIPT, STYLE, 插件自身的类名等) ...
-             if (['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'BR', 'HR'].includes(node.tagName)) continue;
-             if (node.classList && (
-               node.classList.contains('ai-translator-bubble') ||
-               node.classList.contains('ai-trans-minimal') ||
-               node.getAttribute(TRANSLATION_MARK_ATTR) 
-               // ... 其他排除项保持不变
-             )) continue;
-             
-             hasMeaningfulChange = true;
-             break; 
-          }
+          if (node.nodeType !== 1) continue;
+          if (['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'BR', 'HR'].includes(node.tagName)) continue;
+          if (node.classList && (
+            node.classList.contains('ai-translator-bubble') ||
+            node.classList.contains('ai-trans-minimal') ||
+            node.getAttribute(TRANSLATION_MARK_ATTR)
+          )) continue;
+          hasMeaningfulChange = true;
+          break;
         }
       }
       if (hasMeaningfulChange) break;
@@ -129,14 +77,12 @@ function setupMutationObserver() {
 
     if (!hasMeaningfulChange) return;
 
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
+    if (mutationDebounceTimer) clearTimeout(mutationDebounceTimer);
+    mutationDebounceTimer = setTimeout(() => {
        if (!document.hidden && isTranslating) {
-         console.log("页面变动稳定，触发增量翻译...");
-         // ★★★ 关键修改：绝对不要调用 toggle，要调用 enable ★★★
-         enablePageTranslation(); 
+         enablePageTranslation();
        }
-    }, 2000); // Medium 这种网站建议稍微长一点，2秒比较稳
+    }, 2000);
   });
 
   observer.observe(document.body, {
@@ -147,9 +93,6 @@ function setupMutationObserver() {
   });
 }
 
-/* ==============================================
-   模块 2: 悬浮球 (UI更新：支持 Active 状态)
-   ============================================== */
 function createBubble() {
   if (document.querySelector('.ai-translator-bubble')) return;
   const bubble = document.createElement('div');
@@ -209,9 +152,6 @@ function setupDrag(el) {
   });
 }
 
-/* ==============================================
-   模块 3: 划词翻译 (Selection)
-   ============================================== */
 class SelectionManager {
   constructor() {
     this.btn = null;
@@ -315,43 +255,36 @@ class SelectionManager {
     this.card.className = 'ai-card';
 
     const settings = await chrome.storage.local.get(['targetLang', 'precisionMode', 'provider', 'modelName']);
-    const provider = settings.provider || 'builtin_glm'; 
+    const provider = settings.provider || 'deepseek';
     const currentModel = settings.modelName || ""; // 获取具体模型名
 
     const titlePrefixMap = {
         'deepseek': "✨",
-        'openai': "🤖",
         'qwen': "🟣",
         'siliconflow': "🚀",
+        'moonshot': "�",
         'zhipu': "🎓",
-        'groq': "⚡️",
-        'openrouter': "🌐",
-        'ollama': "🏠",
+        'zhipu_free': "�",
         'custom': "⚙️"
     };
 
-    // 构建标题逻辑：Emoji + (具体模型名 OR 厂商名)
-    // 优先显示具体模型名，如果太长或者是默认的，也可以考虑优化，但用户要求明确告知自定义模型，所以优先展示 modelName
     let prefix = titlePrefixMap[provider] || "🤖";
     let displayModel = currentModel;
-    
-    // 如果没有具体模型名（比如旧数据），回退到厂商名
+
     if (!displayModel) {
        const providerNames = {
           'deepseek': "DeepSeek",
-          'openai': "OpenAI",
           'qwen': "Qwen",
           'siliconflow': "SiliconFlow",
-          'zhipu': "GLM-4",
-          'groq': "Llama 3 (Groq)",
-          'openrouter': "OpenRouter",
-          'ollama': "Local Ollama",
+          'moonshot': "Kimi",
+          'zhipu': "GLM-4 Plus",
+          'zhipu_free': "GLM-4 Flash (免费)",
           'custom': "Custom Model"
        };
        displayModel = providerNames[provider] || "AI Translator";
     }
 
-    let cardTitle = `${prefix} ${displayModel}`;
+    const cardTitle = `${prefix} ${displayModel}`;
     
     Object.assign(this.card.style, {
       position: 'absolute',
@@ -403,12 +336,10 @@ class SelectionManager {
     btnExplain.onmouseout = () => btnExplain.style.backgroundColor = 'transparent';
     
     btnExplain.onclick = () => {
-       // 1. 禁用按钮防止重复点击
        btnExplain.disabled = true;
        btnExplain.style.opacity = '0.5';
        btnExplain.innerHTML = '<span>⏳</span> 解读中...';
 
-       // 2. 在内容区追加分割线和容器
        const body = this.card.querySelector('.ai-card-body');
        const separator = document.createElement('hr');
        separator.style.margin = '16px 0';
@@ -424,20 +355,16 @@ class SelectionManager {
        explainBox.style.borderRadius = '8px';
        explainBox.innerHTML = '<span style="color:#94a3b8;font-style:italic;">正在深度解读...</span>';
        body.appendChild(explainBox);
-       
-       // 滚动到底部
+
        body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' });
 
-       // 3. 发起请求
        if (typeof pageManager !== 'undefined') {
-          // 使用 'explain' 模式
           pageManager.addDirectTask(this.selectionText, explainBox, settings.targetLang || 'zh', false, 'explain');
        }
     };
 
     this.setupCardDrag(this.card);
 
-    // 注意：默认精翻模式现在已经是 default，所以 precisionMode 参数其实没用了，但保持传参无害
     this.streamTranslate(this.selectionText, settings.targetLang || 'zh', settings.precisionMode, this.card.querySelector('.ai-card-body'));
   }
 
@@ -445,17 +372,7 @@ class SelectionManager {
     const header = card.querySelector('.ai-card-header');
     let isDragging = false, startX, startY, startLeft, startTop;
 
-    header.onmousedown = (e) => {
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      startLeft = card.offsetLeft;
-      startTop = card.offsetTop;
-      card.style.cursor = 'grabbing';
-      e.stopPropagation();
-    };
-
-    document.onmousemove = (e) => {
+    const onMouseMove = (e) => {
       if (!isDragging) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
@@ -463,30 +380,37 @@ class SelectionManager {
       card.style.top = `${startTop + dy}px`;
     };
 
-    document.onmouseup = () => {
+    const onMouseUp = () => {
+      if (!isDragging) return;
       isDragging = false;
       card.style.cursor = 'default';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
     };
+
+    header.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = card.offsetLeft;
+      startTop = card.offsetTop;
+      card.style.cursor = 'grabbing';
+      e.stopPropagation();
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
   }
 
   streamTranslate(text, targetLang, precisionMode, outputEl) {
     // 1. 初始化 loading 状态，不要直接清空
     outputEl.innerHTML = '<div style="color:#94a3b8;font-style:italic;">Thinking...</div>';
-    
-    // ★★★ 改为通过 pageManager 统一调度 ★★★
-    // 这样能享收到全局限流(串行)和自动重试的好处
+
     if (typeof pageManager !== 'undefined') {
        pageManager.addDirectTask(text, outputEl, targetLang, precisionMode);
-    } else {
-       // fallback (理论上不会走到这)
-       console.error("TranslationManager not initialized");
     }
   }
 }
 
-/* ==============================================
-   模块 4: 页面扫描与块级聚合 (Core Logic)
-   ============================================== */
 const INVALID_TAGS = ['SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'SVG', 'IMG', 'INPUT', 'TEXTAREA', 'BUTTON', 'SELECT', 'HEADER', 'FOOTER'];
 
 function isBlockContainer(el) {
@@ -500,8 +424,7 @@ function getLogicalBlock(node) {
   let curr = node.parentElement;
   while (curr && curr !== document.body) {
     if (INVALID_TAGS.includes(curr.tagName)) return null;
-    if (curr.getAttribute(TRANSLATION_MARK_ATTR)) return null; 
-    // ★★★ 新增：如果遇到 A 标签，直接将其作为独立容器 ★★★
+    if (curr.getAttribute(TRANSLATION_MARK_ATTR)) return null;
     if (curr.tagName === 'A') return curr;
     if (isBlockContainer(curr)) return curr;
     curr = curr.parentElement;
@@ -510,26 +433,22 @@ function getLogicalBlock(node) {
 }
 
 function scanTranslatableElements() {
-  const rawBlocks = []; 
+  const rawBlocks = [];
   let currentBlock = null;
 
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
-      // 1. 基础过滤：排除空文本
       if (!node || !node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-      // 2. 排除不可见元素
-      if (node.parentElement.offsetParent === null) return NodeFilter.FILTER_REJECT;
-      
       const parent = node.parentElement;
+      const style = window.getComputedStyle(parent);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+        return NodeFilter.FILTER_REJECT;
+      }
       const tag = parent.tagName;
-      // 3. 排除代码块、脚本样式等
       if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'TEXTAREA', 'AUDIO', 'VIDEO', 'CANVAS'].includes(tag)) return NodeFilter.FILTER_REJECT;
-
-      // 4. 新增：如果父元素已经有翻译标记，或者已经是翻译相关的类，坚决跳过
       if (parent.getAttribute(TRANSLATION_MARK_ATTR)) return NodeFilter.FILTER_REJECT;
-      if (parent.closest('[data-ai-translated="true"]')) return NodeFilter.FILTER_REJECT; 
+      if (parent.closest('[data-ai-translated="true"]')) return NodeFilter.FILTER_REJECT;
       if (parent.classList.contains('ai-trans-replacement') || parent.classList.contains('ai-trans-minimal')) return NodeFilter.FILTER_REJECT;
-
       return NodeFilter.FILTER_ACCEPT;
     }
   });
@@ -539,8 +458,7 @@ function scanTranslatableElements() {
     const container = getLogicalBlock(currentNode);
     if (!container) continue;
 
-    // ★★★ 核心修改：线性扫描，连续归组 ★★★
-    // 如果容器变化了，就开启新块。这样 A 标签（Link）会打断 P 标签，形成 P1 -> A -> P2 三个块
+    // 线性扫描，连续归组：容器变化时开启新块
     if (currentBlock && currentBlock.container === container) {
        currentBlock.textNodes.push(currentNode);
     } else {
@@ -556,12 +474,10 @@ function scanTranslatableElements() {
     if (block.textNodes.length > 500) return; 
     const fullText = block.textNodes.map(n => n.nodeValue).join('').trim();
     
-    // --- 【过滤逻辑】 ---
-
-    // 1. 长度太短的跳过 (小于2个字符通常是无意义的，除非是中文)
+    // 长度太短的跳过 (小于2个字符通常是无意义的，除非是中文)
     if (fullText.length < 2 && !/[\u4e00-\u9fa5]/.test(fullText)) return;
-    
-    // 2. 纯数字/符号/单位 (保留原有逻辑)
+
+    // 纯数字/符号/单位
     if (/^[\d\s.,!?@#$%^&*()_{}\[\]\-+=|\\/<>:;"'`~a-zA-Z]{1,8}$/.test(fullText)) {
        if (/^[\d\s\W_a-zA-Z]+$/.test(fullText)) {
          if (/\d/.test(fullText)) return;
@@ -569,15 +485,14 @@ function scanTranslatableElements() {
     }
     if (/^[\d\s.,!?@#$%^&*()_{}\[\]\-+=|\\/<>:;"'`~]+$/.test(fullText)) return;
 
-    // 3. 【新增】排除纯日期格式 (如 2023-10-01, 10/01/2023, 2023年10月)
+    // 排除纯日期格式
     if (/^\d{2,4}[-\/年]\d{1,2}[-\/月]\d{1,2}[日]?(\s\d{1,2}:\d{2})?$/.test(fullText)) return;
-    
-    // 4. 【新增】排除邮箱和网址
-    if (/^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$/.test(fullText)) return; // 邮箱
-    if (/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(fullText)) return; // 网址
 
-    // 5. 【新增】排除看起来像代码变量名的 (驼峰或下划线，且没有空格)
-    // 例如: userProfile, get_data_from_server (通常不需要翻译)
+    // 排除邮箱和网址
+    if (/^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$/.test(fullText)) return;
+    if (/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(fullText)) return;
+
+    // 排除代码变量名 (驼峰或下划线)
     if (/^[a-z]+[A-Z][a-zA-Z0-9]*$/.test(fullText) && fullText.length < 30) return;
     if (/^[a-z]+_[a-z0-9_]+$/.test(fullText) && fullText.length < 30) return;
 
@@ -591,11 +506,9 @@ class TranslationManager {
   constructor() {
     this.queue = [];
     this.activeCount = 0;
-    this.activeCount = 0;
-    this.concurrency = 15; // 极速模式 (风险：容易触发429)
+    this.concurrency = 15;
     this.settings = {};
-    this.settings = {}; 
-    this.BATCH_DELIMITER = "|||"; // 强壮的分隔符
+    this.BATCH_DELIMITER = "|||";
   }
 
   // 添加任务（包含 UI 生成、打包、入队）
@@ -651,13 +564,7 @@ class TranslationManager {
       transUi.textContent = '...'; 
       transUi.style.color = '#94a3b8';
 
-      // ★★★ 核心修改：插入位置 (UI Insertion) ★★★
-      // 不再简单的 appendChild，而是插在最后一个文本节点后面 (Look-preserving)
-      // 如果 container 是 A 标签，这样会插在 A 标签里面，链接依然有效
-      // 如果 container 是 P，被拆分成了 P1-A-P2，那么 P1 的翻译插在 P1 末尾，A 插在 A 里面，P2 插在 P2 末尾。
       const lastNode = block.textNodes[block.textNodes.length - 1];
-      // 注意：lastNode 已经被 wrap 进 span 了，所以要找 span 的后面
-      // 如果 span 插入成功了，lastNode.parentNode 就是 span
       if (lastNode && lastNode.parentElement && lastNode.parentElement.tagName === 'SPAN') {
          const wrapperSpan = lastNode.parentElement;
          if (wrapperSpan.nextSibling) {
@@ -666,24 +573,21 @@ class TranslationManager {
             wrapperSpan.parentNode.appendChild(transUi);
          }
       } else {
-         // Fallback
          block.container.appendChild(transUi);
       }
-      
+
       block.container.setAttribute(TRANSLATION_MARK_ATTR, 'true');
 
-      // 3. 加入原始任务队列
-      rawTasks.push({ 
-        text: block.originalText, 
-        ui: transUi, 
+      rawTasks.push({
+        text: block.originalText,
+        ui: transUi,
         targetLang: settings.targetLang,
         mode: settings.precisionMode ? 'precision' : 'fast'
       });
     });
 
-    // 2. 打包逻辑 (Batching)
     const BATCH_SIZE_LIMIT = 2000;
-    const BATCH_COUNT_LIMIT = 18;  // 数量限制
+    const BATCH_COUNT_LIMIT = 18;
     let currentBatch = [];
     let currentBatchLen = 0;
 
@@ -711,45 +615,37 @@ class TranslationManager {
     this.processQueue();
   }
 
-  // 辅助：打包入队
   pushBatchTask(batchItems, isPriority, traceId) {
     if(!batchItems.length) return;
-    
-    // 构造 batch 任务文本 "A ||| B ||| C"
+
     const combinedText = batchItems.map(i => i.text).join(" " + this.BATCH_DELIMITER + " ");
-    
+
     const task = {
       type: 'batch',
       text: combinedText,
-      items: batchItems, // 这是一个数组 [{ui, text}, ...]
-      targetLang: batchItems[0].targetLang, // 取第一个的配置即可
+      items: batchItems,
+      targetLang: batchItems[0].targetLang,
       mode: batchItems[0].mode,
       traceId: traceId,
-      retryCount: 0 // 初始化重试次数
+      retryCount: 0
     };
 
-    if (isPriority) {
-      this.queue.unshift(task); // 插队
-    } else {
-      this.queue.push(task);
-    }
-    
+    if (isPriority) this.queue.unshift(task);
+    else this.queue.push(task);
+
     this.processQueue();
   }
 
-  // ★★★ 新增：直接添加卡片任务 (Card Task) ★★★
   addDirectTask(text, outputEl, targetLang, precisionMode, modeOverride = null) {
      const task = {
-       type: 'card', // 特殊类型
+       type: 'card',
        text: text,
        ui: outputEl,
        targetLang: targetLang,
-       // 如果有 override (比如 'explain') 则优先使用，否则看 precisionMode
        mode: modeOverride ? modeOverride : (precisionMode ? 'precision' : 'fast'),
-       retryCount: 0 // 初始化重试次数
+       retryCount: 0
      };
-     
-     // 卡片翻译优先级最高，直接插队到最前面
+
      this.queue.unshift(task);
      this.processQueue();
   }
@@ -759,11 +655,7 @@ class TranslationManager {
       setBubbleLoading(false); return;
     }
 
-    // 防御：如果页面在后台，暂停队列处理
-    if (document.hidden) {
-      console.log("页面在后台，暂停队列处理");
-      return; 
-    }
+    if (document.hidden) return;
 
     while (this.activeCount < this.concurrency && this.queue.length > 0) {
       const nextTask = this.queue.shift();
@@ -775,12 +667,10 @@ class TranslationManager {
 
   runTask(task) {
     if (!task) {
-      console.warn("Skipped empty task");
       this.processQueue();
       return;
     }
-    
-    // 初始化重试计数
+
     if (task.retryCount === undefined) task.retryCount = 0;
 
     this.activeCount++;
@@ -799,8 +689,6 @@ class TranslationManager {
     let hasError = false; // 标记是否发生错误
     
     port.onDisconnect.addListener(() => {
-      // 只有在非重试的情况下才减少 activeCount 并继续队列
-      // 如果正在重试 wait 期间，不要减少
       if (!task.isRetrying) {
         setTimeout(() => {
            this.activeCount--;
@@ -809,7 +697,6 @@ class TranslationManager {
       }
     });
 
-    // ★★★ 关键：把身份证带在请求上 ★★★
     port.postMessage({ action: "TRANSLATE", text: task.text, targetLang: task.targetLang, mode: task.mode, traceId: task.traceId });
     
     port.onMessage.addListener((msg) => {
@@ -828,43 +715,32 @@ class TranslationManager {
       }
       else if (msg.action === "DONE" || msg.error) {
          if (msg.error) { 
-           console.error("API Error:", msg.error);
            hasError = true;
 
-           // --- 429 自动重试逻辑 ---
            const isRateLimit = msg.error.includes("429") || msg.error.includes("concurrency") || msg.error.includes("limit") || msg.error.includes("并发");
            if (isRateLimit && task.retryCount < 3) {
-              console.warn(`[AI翻译] 触发限流 (429)，准备第 ${task.retryCount + 1} 次重试...`);
-              
               task.retryCount++;
-              task.isRetrying = true; // 标记正在重试状态
-              
-              // 随机退避 2s - 5s
+              task.isRetrying = true;
               const backoff = 2000 + Math.random() * 3000;
-              
               setTimeout(() => {
-                 this.activeCount--; // 释放占用
+                 this.activeCount--;
                  task.isRetrying = false;
-                 // 重新入队头部，优先重试
                  this.queue.unshift(task);
                  this.processQueue();
               }, backoff);
-              
               port.disconnect();
-              return; // ★ 阻断后续报错流程
+              return;
            }
            
-           // 非429或重试耗尽，显示错误
            const applyError = (item, original) => {
              if(item.ui) {
-               // 特殊处理：如果是卡片任务，显示富文本报错
                if (task.type === 'card') {
                  item.ui.innerHTML = `<div style="color:#ef4444; padding:8px 0;">
                    <strong>Error:</strong> ${msg.error}
                    <div style="font-size:12px; margin-top:4px; color:#64748b;">请检查 API Key 或模型名称是否正确</div>
                  </div>`;
                } else {
-                 item.ui.textContent = original; // 回填原文
+                 item.ui.textContent = original;
                  item.ui.title = "翻译失败: " + msg.error;
                  item.ui.style.borderBottom = "2px solid red";
                }
@@ -877,11 +753,9 @@ class TranslationManager {
              applyError(task, task.text);
            }
          } else {
-           // 检查是否有漏翻（白板），强制回填
            if (task.type === 'batch') {
              task.items.forEach(item => {
                if (item.ui && !item.ui.textContent.trim()) {
-                 console.warn("AI漏翻，回滚原文:", item.text);
                  item.ui.textContent = item.text;
                  item.ui.style.opacity = "0.7"; 
                }
@@ -894,7 +768,6 @@ class TranslationManager {
          }
          
          port.disconnect();
-         // 注意：Disconnect listener 会处理 activeCount--，这里不用管
       }
     });
   }
@@ -902,42 +775,23 @@ class TranslationManager {
 
 const pageManager = new TranslationManager();
 
-// --- [修改] 主控流程：拆分为 开启/关闭/切换 ---
-
-// 1. 切换入口 (给按钮点击用)
 async function togglePageTranslation() {
-  if (isTranslating) {
-    disablePageTranslation();
-  } else {
-    enablePageTranslation();
-  }
+  if (isTranslating) disablePageTranslation();
+  else enablePageTranslation();
 }
 
-// 2. 开启翻译 (或增量扫描) - 幂等操作，多次调用不会副作用
 async function enablePageTranslation() {
-  // 设置状态
-  isTranslating = true; 
+  isTranslating = true;
   updateBubbleState(true);
-  
-  // ★★★ 新增：生成本次翻译的唯一身份证 (Trace ID) ★★★
-  const traceId = crypto.randomUUID(); 
-  console.log(`[AI翻译] 启动新任务，TraceID: ${traceId}`);
 
-  // 获取设置
+  const traceId = crypto.randomUUID();
+
   const settings = await chrome.storage.local.get(['targetLang', 'bilingualMode', 'transStyle', 'precisionMode']);
-  const lang = settings.targetLang || 'zh';// 默认中文
-  
-  // 1. 扫描所有文本块
+  const lang = settings.targetLang || 'zh';
+
   let blocks = scanTranslatableElements();
-  
-  if (blocks.length === 0) { 
-    // console.log("当前未发现新增的可翻译内容"); 
-    return; 
-  }
+  if (blocks.length === 0) return;
 
-  console.log(`[AI翻译] 发现 ${blocks.length} 个新文本块，加入队列...`);
-
-  // --- 可视区域优先 (Viewport Priority) ---
   const vh = window.innerHeight;
   blocks.sort((a, b) => {
     const rectA = a.container.getBoundingClientRect();
@@ -949,7 +803,6 @@ async function enablePageTranslation() {
     return rectA.top - rectB.top;
   });
 
-  // 2. 加入队列
   pageManager.addTasks(blocks, {
     targetLang: lang,
     bilingualMode: settings.bilingualMode !== false,
@@ -958,33 +811,20 @@ async function enablePageTranslation() {
   });
 }
 
-// 3. 关闭翻译 (还原页面)
 function disablePageTranslation() {
   isTranslating = false;
   setBubbleLoading(false);
   updateBubbleState(false);
-  
-  // 清空队列
+
   pageManager.queue = [];
   pageManager.activeCount = 0;
 
-  // 移除所有翻译元素
   document.querySelectorAll('.ai-translate-block, .ai-trans-minimal, .ai-trans-minimal-block, .ai-trans-replacement').forEach(el => el.remove());
-  
-  // 恢复原文显示
+
   document.querySelectorAll(`[${ORIGIN_MARK_ATTR}]`).forEach(el => {
     el.classList.remove('hidden');
-    // 如果之前为了结构把 textNode 包裹进了 span，这里可以不拆包，只显示即可，
-    // 或者你可以选择彻底还原 DOM 结构 (可选，为了性能通常只移除 hidden 类)
-    if (el.tagName === 'SPAN' && el.getAttribute(ORIGIN_MARK_ATTR)) {
-        // 可选：彻底还原
-        // const parent = el.parentNode;
-        // while(el.firstChild) parent.insertBefore(el.firstChild, el);
-        // parent.removeChild(el);
-    }
   });
 
-  // 移除标记
   document.querySelectorAll(`[${TRANSLATION_MARK_ATTR}]`).forEach(el => el.removeAttribute(TRANSLATION_MARK_ATTR));
 }
 
