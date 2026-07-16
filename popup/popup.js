@@ -1,83 +1,77 @@
+if (!globalThis.chrome?.storage?.local && ['localhost', '127.0.0.1'].includes(location.hostname)) {
+  const previewStore = { provider: 'deepseek', targetLang: 'zh', bilingualMode: true, transStyle: 'minimal', showBubble: true };
+  globalThis.chrome = {
+    storage: {
+      local: {
+        get(keys, callback) {
+          const list = Array.isArray(keys) ? keys : Object.keys(keys || previewStore);
+          const result = Object.fromEntries(list.filter(key => key in previewStore).map(key => [key, previewStore[key]]));
+          if (callback) callback(result);
+          return Promise.resolve(result);
+        },
+        set(values, callback) {
+          Object.assign(previewStore, values);
+          if (callback) callback();
+          return Promise.resolve();
+        }
+      }
+    },
+    tabs: {
+      query(_query, callback) {
+        const tabs = [{ id: 1, url: 'https://example.com/article' }];
+        if (callback) callback(tabs);
+        return Promise.resolve(tabs);
+      },
+      sendMessage(_id, message, callback) {
+        const response = message.action === 'GET_STATE' ? { isTranslating: false } : {};
+        if (callback) callback(response);
+        return Promise.resolve(response);
+      }
+    },
+    runtime: { lastError: null }
+  };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const i18n = {
     zh: {
       appTitle: "AI 极简翻译", statusReady: "就绪",
       btnTrans: "翻译当前页面", btnRestore: "显示原文",
       lblTarget: "目标语言", lblBiMode: "双语对照", lblStyle: "对照样式",
-      optMinimal: "极简 (宋体/灰字)", optHighlight: "高亮 (蓝条/色块)",
-      lblBubble: "悬浮球入口", lblAuto: "始终翻译此网站",
-      headerApi: "模型 API 配置", placeholderKey: "请输入 API Key (sk-...)",
-      btnSave: "保存配置", btnSaved: "已保存!",
-      tipsKey: "Key 仅保存在本地，不会上传服务器。", langBtn: "EN",
+      optMinimal: "轻量", optHighlight: "高亮",
+      lblBubble: "悬浮翻译入口", lblAuto: "始终翻译此网站",
+      headerApi: "模型连接", placeholderKey: "sk-...",
+      btnSave: "保存并使用", btnSaved: "已保存",
+      tipsKey: "Key 仅保存在浏览器本地。网页文本会发送到你选择的模型服务商。", langBtn: "EN",
       lblCurrentModel: "模型: ", lblProvider: "模型服务商",
-      lblModelName: "模型名称", tipsModel: "留空则使用默认模型 · 点击 ▾ 选择或 ↻ 刷新",
+      lblModelName: "模型名称", tipsModel: "可选择推荐模型，也可直接输入",
       tipsModelFetching: "正在获取模型列表...",
       tipsModelFetched: "已获取 {{count}} 个模型 · 可手动输入",
       tipsModelFetchError: "获取失败，使用推荐模型 · 可手动输入",
-      tipsModelBuiltin: "✨ 内置免费模型，无需配置 API Key，开箱即用",
+      tipsModelBuiltin: "内置免费模型，无需配置 API Key，开箱即用",
       dropdownEmpty: "暂无可用模型"
     },
     en: {
       appTitle: "AI Translate", statusReady: "Ready",
       btnTrans: "Translate Page", btnRestore: "Show Original",
       lblTarget: "Target Lang", lblBiMode: "Bilingual", lblStyle: "Style",
-      optMinimal: "Minimal (Italic/Gray)", optHighlight: "Highlight (Blue Block)",
-      lblBubble: "Floating Bubble", lblAuto: "Always Translate",
-      headerApi: "API Settings", placeholderKey: "Enter API Key (sk-...)",
-      btnSave: "Save Key", btnSaved: "Saved!",
-      tipsKey: "Key is stored locally, never uploaded.", langBtn: "中文",
+      optMinimal: "Light", optHighlight: "Highlight",
+      lblBubble: "Floating shortcut", lblAuto: "Always translate this site",
+      headerApi: "Model connection", placeholderKey: "sk-...",
+      btnSave: "Save and use", btnSaved: "Saved",
+      tipsKey: "The key stays in this browser. Text is sent to your selected model provider.", langBtn: "中文",
       lblCurrentModel: "Model: ", lblProvider: "AI Provider",
-      lblModelName: "Model Name", tipsModel: "Leave empty for default · Click ▾ to select or ↻ to refresh",
+      lblModelName: "Model name", tipsModel: "Choose a recommended model or type one",
       tipsModelFetching: "Fetching model list...",
       tipsModelFetched: "{{count}} models fetched · Type to customize",
       tipsModelFetchError: "Fetch failed, using recommended models · Type to customize",
-      tipsModelBuiltin: "✨ Built-in free model, no API Key needed",
+      tipsModelBuiltin: "Built-in free model, no API Key needed",
       dropdownEmpty: "No models available"
     }
   };
 
-  const PROVIDERS = {
-    deepseek:    {
-      url: "https://api.deepseek.com/chat/completions",
-      model: "deepseek-chat",
-      modelsUrl: "https://api.deepseek.com/models",
-      commonModels: ["deepseek-chat", "deepseek-reasoner"]
-    },
-    moonshot:    {
-      url: "https://api.moonshot.cn/v1/chat/completions",
-      model: "kimi-k2-turbo-preview",
-      modelsUrl: "https://api.moonshot.cn/v1/models",
-      commonModels: ["kimi-k2-turbo-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
-    },
-    siliconflow: {
-      url: "https://api.siliconflow.cn/v1/chat/completions",
-      model: "deepseek-ai/DeepSeek-V3",
-      modelsUrl: "https://api.siliconflow.cn/v1/models",
-      commonModels: ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1", "Qwen/Qwen2.5-72B-Instruct", "THUDM/glm-4-9b-chat"]
-    },
-    qwen:        {
-      url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-      model: "qwen-turbo",
-      modelsUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
-      commonModels: ["qwen-turbo", "qwen-plus", "qwen-max", "qwen-long", "qwen2.5-72b-instruct"]
-    },
-    zhipu:       {
-      url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-      model: "glm-4-plus",
-      modelsUrl: "https://open.bigmodel.cn/api/paas/v4/models",
-      commonModels: ["glm-4-plus", "glm-4-air", "glm-4-airx", "glm-4-long", "glm-4-flash"]
-    },
-    zhipu_free:  {
-      url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-      model: "glm-4-flash",
-      modelsUrl: "",
-      commonModels: ["glm-4-flash"],
-      isBuiltin: true
-    },
-    custom:      {
-      url: "", model: "", modelsUrl: "", commonModels: []
-    }
-  };
+  const PROVIDER_CATALOG = globalThis.AI_TRANSLATE_PROVIDER_CATALOG;
+  const PROVIDERS = PROVIDER_CATALOG.providers;
 
   const els = {
     appTitle: document.getElementById('app-title'),
@@ -95,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     saveKeyBtn: document.getElementById('save-key-btn'),
     lblProvider: document.getElementById('lbl-provider'),
     providerSelect: document.getElementById('provider-select'),
+    providerEndpoint: document.getElementById('provider-endpoint'),
     modelNameRow: document.getElementById('model-name-row'),
     customUrlRow: document.getElementById('custom-url-row'),
     mainBtn: document.getElementById('main-action-btn'),
@@ -120,6 +115,9 @@ document.addEventListener('DOMContentLoaded', () => {
     modelDropdownBtn: document.getElementById('model-dropdown-btn'),
     modelDropdown: document.getElementById('model-dropdown')
   };
+  const panelFeedback = document.getElementById('panel-feedback');
+  const panelTabs = [...document.querySelectorAll('[data-panel-target]')];
+  const panelViews = [...document.querySelectorAll('[data-panel]')];
 
   let currentDomain = '';
   let currentUiLang = 'zh';
@@ -129,9 +127,87 @@ document.addEventListener('DOMContentLoaded', () => {
   let isInitializing = true;
   let isKeyboardNav = false;
   let suppressFocusOpen = false;
+  let providerProfiles = {};
+
+  function populateProviderSelect() {
+    if (!els.providerSelect) return;
+    els.providerSelect.replaceChildren(...Object.entries(PROVIDERS).map(([value, config]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = currentUiLang === 'en' ? config.labelEn : config.labelZh;
+      return option;
+    }));
+  }
+
+  function updateProviderEndpoint(provider) {
+    if (!els.providerEndpoint) return;
+    const config = PROVIDERS[provider];
+    if (!config) return;
+    const note = currentUiLang === 'en' ? config.endpointNoteEn : config.endpointNoteZh;
+    const prefix = currentUiLang === 'en' ? 'Base URL' : 'Base URL';
+    els.providerEndpoint.textContent = config.baseUrl ? `${prefix}: ${config.baseUrl}${note ? ` · ${note}` : ''}` : (note || '');
+  }
+
+  function migrateProviderSettings(settings) {
+    const provider = settings.provider || PROVIDER_CATALOG.defaultProvider;
+    const config = PROVIDERS[provider] || PROVIDERS[PROVIDER_CATALOG.defaultProvider];
+    const next = { ...settings, provider };
+    const migratedModel = config.modelMigrations?.[settings.modelName];
+    if (migratedModel) next.modelName = migratedModel;
+    if (!settings.modelName && provider !== 'custom' && !config.isBuiltin) next.modelName = config.model;
+    next.providerProfiles = { ...(settings.providerProfiles || {}) };
+    if (!next.providerProfiles[provider] && (settings.apiKey || settings.apiUrl || settings.modelName)) {
+      next.providerProfiles[provider] = {
+        apiKey: settings.apiKey || '',
+        apiUrl: settings.apiUrl || config.url || '',
+        modelName: next.modelName || config.model || ''
+      };
+    }
+    Object.entries(next.providerProfiles).forEach(([profileProvider, profile]) => {
+      const profileConfig = PROVIDERS[profileProvider];
+      if (!profileConfig || !profile) return;
+      const profileModel = profileConfig.modelMigrations?.[profile.modelName] || profile.modelName;
+      next.providerProfiles[profileProvider] = { ...profile, modelName: profileModel || profileConfig.model || '' };
+    });
+    next.providerConfigVersion = PROVIDER_CATALOG.version;
+    return next;
+  }
+
+  function activatePanel(name) {
+    panelTabs.forEach(tab => {
+      const active = tab.dataset.panelTarget === name;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+    });
+    panelViews.forEach(view => view.classList.toggle('hidden', view.dataset.panel !== name));
+  }
+
+  function showFeedback(message, type = 'error') {
+    if (!panelFeedback) return;
+    panelFeedback.textContent = message || '';
+    panelFeedback.dataset.type = type;
+    panelFeedback.style.color = type === 'success' ? 'var(--success)' : 'var(--danger)';
+    if (message && els.statusBadge) {
+      els.statusBadge.textContent = type === 'success' ? '已保存' : '需处理';
+      setTimeout(() => {
+        if (els.statusBadge) els.statusBadge.textContent = (i18n[currentUiLang] || i18n.zh).statusReady;
+      }, 1800);
+    }
+  }
+
+  function validateApiUrl(value) {
+    let url;
+    try { url = new URL(value); } catch { return false; }
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    return !url.username && !url.password && (url.protocol === 'https:' || (url.protocol === 'http:' && local));
+  }
 
   function updateUILanguage(lang) {
     currentUiLang = lang;
+    const selectedProvider = els.providerSelect?.value || PROVIDER_CATALOG.defaultProvider;
+    populateProviderSelect();
+    if (els.providerSelect) els.providerSelect.value = selectedProvider;
+    updateProviderEndpoint(selectedProvider);
     const t = i18n[lang];
     if (!t) return;
     if (els.appTitle) els.appTitle.textContent = t.appTitle;
@@ -153,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const curProvider = els.providerSelect ? els.providerSelect.value : '';
     const curConfig = PROVIDERS[curProvider];
     if (curConfig && curConfig.isBuiltin) {
-      updateModelTips(t.tipsModelBuiltin || '✨ 内置免费模型，无需配置 API Key', 'success');
+      updateModelTips(t.tipsModelBuiltin || '内置免费模型，无需配置 API Key', 'success');
     } else {
       updateModelTips(t.tipsModel);
     }
@@ -218,6 +294,8 @@ document.addEventListener('DOMContentLoaded', () => {
     filtered.forEach((m, idx) => {
       const item = document.createElement('div');
       item.className = 'model-dropdown-item';
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(idx === dropdownActiveIndex));
       if (idx === dropdownActiveIndex) item.classList.add('active');
       item.textContent = m;
       item.addEventListener('mousedown', (e) => {
@@ -238,6 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const items = els.modelDropdown.querySelectorAll('.model-dropdown-item:not(.empty)');
     items.forEach((item, idx) => {
       item.classList.toggle('active', idx === dropdownActiveIndex);
+      item.setAttribute('aria-selected', String(idx === dropdownActiveIndex));
       if (idx === dropdownActiveIndex) {
         item.scrollIntoView({ block: 'nearest' });
       }
@@ -251,11 +330,13 @@ document.addEventListener('DOMContentLoaded', () => {
     dropdownActiveIndex = -1;
     renderModelDropdown(availableModels, els.customModel ? els.customModel.value : '');
     els.modelDropdown.classList.remove('hidden');
+    if (els.customModel) els.customModel.setAttribute('aria-expanded', 'true');
   }
 
   function hideModelDropdown() {
     if (!els.modelDropdown) return;
     els.modelDropdown.classList.add('hidden');
+    if (els.customModel) els.customModel.setAttribute('aria-expanded', 'false');
     dropdownActiveIndex = -1;
   }
 
@@ -350,35 +431,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const config = PROVIDERS[provider] || PROVIDERS['deepseek'];
     const isBuiltin = !!config.isBuiltin;
     hideModelDropdown();
+    updateProviderEndpoint(provider);
 
     if (provider === 'custom') {
       if (els.customUrl && !preserveModel) els.customUrl.value = "";
       if (els.customModel && !preserveModel) els.customModel.value = "";
-      if (els.customUrlRow) els.customUrlRow.classList.remove('hidden');
       populateModelDatalist([]);
     } else {
       if (els.customUrl) els.customUrl.value = config.url;
       if (els.customModel && !preserveModel) els.customModel.value = config.model;
-      if (els.customUrlRow) els.customUrlRow.classList.add('hidden');
       populateModelDatalist(config.commonModels || []);
     }
 
+    if (els.customUrlRow) els.customUrlRow.classList.toggle('hidden', isBuiltin);
+
     if (els.modelNameRow) els.modelNameRow.classList.remove('hidden');
 
+    const apiKeyArea = document.querySelector('.api-key-area');
     if (isBuiltin) {
-      if (els.apiPanel) els.apiPanel.classList.add('hidden');
-      if (els.toggleApi) els.toggleApi.classList.remove('active');
       if (els.apiKey) { els.apiKey.disabled = true; els.apiKey.value = ''; }
       if (els.customModel) els.customModel.disabled = true;
       if (els.modelDropdownBtn) els.modelDropdownBtn.style.display = 'none';
       if (els.refreshModelsBtn) els.refreshModelsBtn.style.display = 'none';
       const modelClearBtn = document.querySelector('.clear-btn[data-target="custom-model-name"]');
       if (modelClearBtn) modelClearBtn.classList.remove('visible');
+      if (apiKeyArea) apiKeyArea.classList.add('hidden');
     } else {
       if (els.apiKey) els.apiKey.disabled = false;
       if (els.customModel) els.customModel.disabled = false;
       if (els.modelDropdownBtn) els.modelDropdownBtn.style.display = '';
-      if (els.refreshModelsBtn) els.refreshModelsBtn.style.display = '';
+      if (els.refreshModelsBtn) els.refreshModelsBtn.style.display = config.modelsUrl ? '' : 'none';
+      if (apiKeyArea) apiKeyArea.classList.remove('hidden');
     }
 
     const t = i18n[currentUiLang] || i18n['zh'];
@@ -390,22 +473,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   chrome.storage.local.get(
-    ['apiKey', 'provider', 'apiUrl', 'modelName', 'targetLang', 'bilingualMode', 'transStyle', 'showBubble', 'autoSites', 'uiLang'],
-    (res) => {
+    ['apiKey', 'provider', 'apiUrl', 'modelName', 'providerProfiles', 'providerConfigVersion', 'targetLang', 'bilingualMode', 'transStyle', 'showBubble', 'autoSites', 'uiLang'],
+    (stored) => {
+      const res = migrateProviderSettings(stored);
+      if (JSON.stringify(res) !== JSON.stringify(stored)) chrome.storage.local.set({
+        provider: res.provider,
+        apiUrl: res.apiUrl || '',
+        modelName: res.modelName || '',
+        providerProfiles: res.providerProfiles || {},
+        providerConfigVersion: res.providerConfigVersion
+      });
+      providerProfiles = res.providerProfiles || {};
+      currentUiLang = res.uiLang || 'zh';
+      populateProviderSelect();
       const currentProvider = res.provider || 'deepseek';
       if (els.providerSelect) els.providerSelect.value = currentProvider;
-      if (els.apiKey) els.apiKey.value = res.apiKey || '';
+      const activeProfile = providerProfiles[currentProvider] || {};
+      if (els.apiKey) els.apiKey.value = activeProfile.apiKey || res.apiKey || '';
 
       const initConfig = PROVIDERS[currentProvider];
       const initIsBuiltin = initConfig && initConfig.isBuiltin;
 
-      if (!res.apiKey && currentProvider !== 'custom' && !initIsBuiltin && els.apiPanel) {
-        els.apiPanel.classList.remove('hidden');
-        if (els.toggleApi) els.toggleApi.classList.add('active');
-      }
-
-      const savedModelName = initIsBuiltin ? '' : (res.modelName || '');
-      const savedApiUrl = initIsBuiltin ? '' : (res.apiUrl || '');
+      const savedModelName = initIsBuiltin ? '' : (activeProfile.modelName || res.modelName || '');
+      const savedApiUrl = initIsBuiltin ? '' : (activeProfile.apiUrl || res.apiUrl || '');
       applyProviderChange(currentProvider, true);
 
       if (els.customUrl) els.customUrl.value = savedApiUrl || (PROVIDERS[currentProvider] ? PROVIDERS[currentProvider].url : '');
@@ -419,9 +509,7 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleStyleRow(els.bilingualMode && els.bilingualMode.checked);
       updateModelSubtitle(savedModelName, currentProvider);
 
-      if (currentProvider !== 'custom' && !initIsBuiltin && PROVIDERS[currentProvider] && PROVIDERS[currentProvider].modelsUrl) {
-        fetchModelsFromAPI(currentProvider);
-      }
+      if (PROVIDERS[currentProvider]) populateModelDatalist(PROVIDERS[currentProvider].commonModels || []);
 
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tab = tabs[0];
@@ -453,12 +541,18 @@ document.addEventListener('DOMContentLoaded', () => {
     els.mainBtn.addEventListener('click', async () => {
       const isCurrentlyRestoring = els.mainBtn.classList.contains('restoring');
       updateMainButtonUI(!isCurrentlyRestoring);
+      showFeedback('');
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab) return;
+      if (!tab) {
+        updateMainButtonUI(isCurrentlyRestoring);
+        showFeedback('未找到当前网页。');
+        return;
+      }
       try {
         await chrome.tabs.sendMessage(tab.id, { action: "START_TRANSLATION" });
       } catch (err) {
-        alert("无法连接页面，请刷新网页后重试。");
+        updateMainButtonUI(isCurrentlyRestoring);
+        showFeedback('无法连接当前页面，请刷新网页后重试。');
       }
     });
   }
@@ -504,9 +598,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const newProvider = e.target.value;
       const config = PROVIDERS[newProvider];
       applyProviderChange(newProvider);
-      if (newProvider !== 'custom' && config && config.modelsUrl && !config.isBuiltin) {
-        fetchModelsFromAPI(newProvider);
-      }
+      const profile = providerProfiles[newProvider] || {};
+      if (els.apiKey && !config?.isBuiltin) els.apiKey.value = profile.apiKey || '';
+      if (els.customUrl && !config?.isBuiltin) els.customUrl.value = profile.apiUrl || config?.url || '';
+      if (els.customModel && !config?.isBuiltin) els.customModel.value = profile.modelName || config?.model || '';
+      if (config) populateModelDatalist(config.commonModels || []);
       if (els.customModel) els.customModel.dispatchEvent(new Event('input'));
       if (els.customUrl) els.customUrl.dispatchEvent(new Event('input'));
 
@@ -544,11 +640,13 @@ document.addEventListener('DOMContentLoaded', () => {
           sites = sites.filter(s => s !== currentDomain);
         }
         chrome.storage.local.set({ autoSites: sites }, () => {
-          if (isChecked) {
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-              if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { action: "CHECK_AUTO_TRANSLATE" });
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (!tabs[0]) return;
+            chrome.tabs.sendMessage(tabs[0].id, {
+              action: "AUTO_TRANSLATE_SETTING_CHANGED",
+              enabled: isChecked
             });
-          }
+          });
         });
       });
     });
@@ -569,10 +667,40 @@ document.addEventListener('DOMContentLoaded', () => {
       const pConfig = PROVIDERS[provider];
       const pIsBuiltin = pConfig && pConfig.isBuiltin;
 
-      chrome.storage.local.set({ apiKey: key, provider, apiUrl, modelName }, () => {
+      if (!pIsBuiltin && provider !== 'custom' && !key) {
+        activatePanel('model');
+        showFeedback('请填写 API Key 后再保存。');
+        els.apiKey?.focus();
+        return;
+      }
+      if (provider === 'custom' && !validateApiUrl(apiUrl)) {
+        activatePanel('model');
+        showFeedback('自定义 API 地址必须使用 HTTPS，本地调试仅允许 localhost。');
+        els.customUrl?.focus();
+        return;
+      }
+      if (!modelName) {
+        showFeedback('请填写模型名称。');
+        els.customModel?.focus();
+        return;
+      }
+
+      providerProfiles = {
+        ...providerProfiles,
+        [provider]: { apiKey: pIsBuiltin ? '' : key, apiUrl, modelName }
+      };
+      chrome.storage.local.set({
+        apiKey: pIsBuiltin ? '' : key,
+        provider,
+        apiUrl,
+        modelName,
+        providerProfiles,
+        providerConfigVersion: PROVIDER_CATALOG.version
+      }, () => {
         const oldText = els.saveKeyBtn.textContent;
         els.saveKeyBtn.textContent = i18n[currentUiLang].btnSaved;
         els.saveKeyBtn.classList.add('saved');
+        showFeedback('模型配置已保存。', 'success');
         updateModelSubtitle(modelName, provider);
         if (!pIsBuiltin && provider !== 'custom' && pConfig && pConfig.modelsUrl) {
           fetchModelsFromAPI(provider);
@@ -594,7 +722,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (els.toggleEye) {
     els.toggleEye.addEventListener('click', () => {
-      if (els.apiKey) els.apiKey.type = els.apiKey.type === 'password' ? 'text' : 'password';
+      if (els.apiKey) {
+        const reveal = els.apiKey.type === 'password';
+        els.apiKey.type = reveal ? 'text' : 'password';
+        els.toggleEye.textContent = reveal ? '隐藏' : '显示';
+        els.toggleEye.setAttribute('aria-pressed', String(reveal));
+      }
     });
   }
 
@@ -700,4 +833,19 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
+
+  panelTabs.forEach(tab => tab.addEventListener('click', () => activatePanel(tab.dataset.panelTarget)));
+  const copyQq = document.getElementById('copy-qq');
+  if (copyQq) {
+    copyQq.addEventListener('click', async () => {
+      const action = copyQq.querySelector('.contact-action');
+      try {
+        await navigator.clipboard.writeText('376556413');
+        if (action) action.textContent = '已复制';
+      } catch {
+        if (action) action.textContent = '复制失败';
+      }
+      setTimeout(() => { if (action) action.textContent = '复制群号'; }, 1200);
+    });
+  }
 });

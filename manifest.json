@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "AI 极简翻译",
-  "version": "1.5.0",
-  "description": "极简网页翻译插件，支持多服务商、流式输出、双语对照与沉浸式阅读。",
+  "version": "1.6.7",
+  "description": "快速、准确、节省 Token 的网页与划词翻译插件。",
   "permissions": [
-    "storage",          
+    "storage",
     "activeTab",
     "scripting"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "https://*/*",
+    "http://*/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
@@ -20,7 +21,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://*/*", "http://*/*"],
       "js": ["content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
