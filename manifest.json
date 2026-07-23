@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI 极简翻译",
-  "version": "1.6.7",
+  "version": "2.0.0",
   "description": "快速、准确、节省 Token 的网页与划词翻译插件。",
   "permissions": [
     "storage",
