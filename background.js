@@ -112,7 +112,11 @@ function resolveEndpoint(settings, provider) {
   if (parsed.username || parsed.password || (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLocal))) {
     throw new Error("API 地址必须使用 HTTPS，本地调试仅允许 localhost");
   }
-  return { defaults, isBuiltin, apiUrl: parsed.href, model, requestOptions: defaults.requestOptions || {} };
+  const requestOptions = {
+    ...(defaults.requestOptions || {}),
+    ...(defaults.modelRequestOptions?.[model] || {})
+  };
+  return { defaults, isBuiltin, apiUrl: parsed.href, model, requestOptions };
 }
 
 function safePortPost(port, message) {

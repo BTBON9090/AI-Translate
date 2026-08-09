@@ -26,11 +26,21 @@ if (!globalThis.chrome?.storage?.local && ['localhost', '127.0.0.1'].includes(lo
         const response = message.action === 'GET_STATE' ? { isTranslating: false } : {};
         if (callback) callback(response);
         return Promise.resolve(response);
+      },
+      create({ url }) {
+        return Promise.resolve({ id: 2, url });
       }
     },
-    runtime: { lastError: null }
+    runtime: {
+      lastError: null,
+      getManifest() { return { version: '2.0.1' }; }
+    }
   };
 }
+
+const UPDATE_ORIGIN = 'https://ai-translate-release-1317980685.cos.ap-shanghai.myqcloud.com';
+const UPDATE_MANIFEST_URL = `${UPDATE_ORIGIN}/update_manifest.json`;
+const UPDATE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 document.addEventListener('DOMContentLoaded', () => {
   const i18n = {
@@ -49,7 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
       tipsModelFetched: "已获取 {{count}} 个模型 · 可手动输入",
       tipsModelFetchError: "获取失败，使用推荐模型 · 可手动输入",
       tipsModelBuiltin: "内置免费模型，无需配置 API Key，开箱即用",
-      dropdownEmpty: "暂无可用模型"
+      dropdownEmpty: "暂无可用模型",
+      updateTitle: "版本更新", updateChecking: "正在检查最新版…", updateCheck: "检查更新",
+      updateLatest: "当前 v{{version}} 已是最新版", updateAvailable: "发现新版本 v{{version}}",
+      updateFailed: "暂时无法连接更新服务器", updateDownload: "下载 v{{version}}",
+      updateDownloaded: "已开始下载，解压后请在扩展管理页重新加载"
     },
     en: {
       appTitle: "AI Translate", statusReady: "Ready",
@@ -66,7 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
       tipsModelFetched: "{{count}} models fetched · Type to customize",
       tipsModelFetchError: "Fetch failed, using recommended models · Type to customize",
       tipsModelBuiltin: "Built-in free model, no API Key needed",
-      dropdownEmpty: "No models available"
+      dropdownEmpty: "No models available",
+      updateTitle: "Updates", updateChecking: "Checking for updates…", updateCheck: "Check",
+      updateLatest: "v{{version}} is up to date", updateAvailable: "v{{version}} is available",
+      updateFailed: "Update server is temporarily unavailable", updateDownload: "Download v{{version}}",
+      updateDownloaded: "Download started. Unzip it, then reload the extension."
     }
   };
 
@@ -113,7 +131,12 @@ document.addEventListener('DOMContentLoaded', () => {
     tipsModel: document.getElementById('tips-model-name'),
     refreshModelsBtn: document.getElementById('refresh-models-btn'),
     modelDropdownBtn: document.getElementById('model-dropdown-btn'),
-    modelDropdown: document.getElementById('model-dropdown')
+    modelDropdown: document.getElementById('model-dropdown'),
+    updateTitle: document.getElementById('update-title'),
+    updateStatus: document.getElementById('update-status'),
+    updateButton: document.getElementById('check-update-btn'),
+    updateNotes: document.getElementById('update-notes'),
+    currentVersion: document.getElementById('current-version')
   };
   const panelFeedback = document.getElementById('panel-feedback');
   const panelTabs = [...document.querySelectorAll('[data-panel-target]')];
@@ -128,6 +151,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let isKeyboardNav = false;
   let suppressFocusOpen = false;
   let providerProfiles = {};
+  let updateState = 'checking';
+  let availableUpdate = null;
+
+  const installedVersion = chrome.runtime.getManifest().version;
+  if (els.currentVersion) els.currentVersion.textContent = installedVersion;
 
   function populateProviderSelect() {
     if (!els.providerSelect) return;
@@ -202,6 +230,93 @@ document.addEventListener('DOMContentLoaded', () => {
     return !url.username && !url.password && (url.protocol === 'https:' || (url.protocol === 'http:' && local));
   }
 
+  function normalizeChatCompletionsUrl(value) {
+    const trimmed = String(value || '').trim().replace(/\/+$/, '');
+    if (/\/(?:compatible-mode\/)?v1$/i.test(trimmed)) return `${trimmed}/chat/completions`;
+    return trimmed;
+  }
+
+  function compareVersions(left, right) {
+    const a = String(left).split(/[.-]/).map(part => Number.parseInt(part, 10) || 0);
+    const b = String(right).split(/[.-]/).map(part => Number.parseInt(part, 10) || 0);
+    const length = Math.max(a.length, b.length);
+    for (let index = 0; index < length; index += 1) {
+      if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) > (b[index] || 0) ? 1 : -1;
+    }
+    return 0;
+  }
+
+  function normalizeUpdateInfo(data) {
+    if (!data || !/^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?$/.test(String(data.version || ''))) return null;
+    let downloadUrl;
+    try { downloadUrl = new URL(data.downloadUrl); } catch { return null; }
+    if (downloadUrl.protocol !== 'https:' || downloadUrl.origin !== UPDATE_ORIGIN) return null;
+    return {
+      version: String(data.version),
+      downloadUrl: downloadUrl.href,
+      sha256: /^[a-f0-9]{64}$/i.test(String(data.sha256 || '')) ? String(data.sha256).toLowerCase() : '',
+      releaseNotes: String(data.releaseNotes || '').slice(0, 800)
+    };
+  }
+
+  function renderUpdateState(state, info = availableUpdate) {
+    updateState = state;
+    const t = i18n[currentUiLang] || i18n.zh;
+    if (els.updateTitle) els.updateTitle.textContent = t.updateTitle;
+    if (!els.updateButton || !els.updateStatus) return;
+    els.updateButton.disabled = state === 'checking';
+    els.updateButton.classList.toggle('available', state === 'available');
+    els.updateNotes?.classList.add('hidden');
+
+    if (state === 'checking') {
+      els.updateStatus.textContent = t.updateChecking;
+      els.updateButton.textContent = t.updateCheck;
+    } else if (state === 'available' && info) {
+      els.updateStatus.textContent = t.updateAvailable.replace('{{version}}', info.version);
+      els.updateButton.textContent = t.updateDownload.replace('{{version}}', info.version);
+      if (info.releaseNotes && els.updateNotes) {
+        els.updateNotes.textContent = info.releaseNotes;
+        els.updateNotes.classList.remove('hidden');
+      }
+    } else if (state === 'downloaded') {
+      els.updateStatus.textContent = t.updateDownloaded;
+      els.updateButton.textContent = t.updateCheck;
+    } else if (state === 'error') {
+      els.updateStatus.textContent = t.updateFailed;
+      els.updateButton.textContent = t.updateCheck;
+    } else {
+      els.updateStatus.textContent = t.updateLatest.replace('{{version}}', installedVersion);
+      els.updateButton.textContent = t.updateCheck;
+    }
+  }
+
+  async function checkForUpdates(force = false) {
+    renderUpdateState('checking');
+    try {
+      let info = null;
+      if (!force) {
+        const cached = await chrome.storage.local.get(['updateInfoV1', 'updateCheckedAt']);
+        if (Date.now() - Number(cached.updateCheckedAt || 0) < UPDATE_CACHE_TTL_MS) {
+          info = normalizeUpdateInfo(cached.updateInfoV1);
+        }
+      }
+      if (!info) {
+        const response = await fetch(`${UPDATE_MANIFEST_URL}?t=${Date.now()}`, {
+          method: 'GET', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer'
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        info = normalizeUpdateInfo(await response.json());
+        if (!info) throw new Error('Invalid update manifest');
+        await chrome.storage.local.set({ updateInfoV1: info, updateCheckedAt: Date.now() });
+      }
+      availableUpdate = compareVersions(info.version, installedVersion) > 0 ? info : null;
+      renderUpdateState(availableUpdate ? 'available' : 'current', availableUpdate);
+    } catch {
+      availableUpdate = null;
+      renderUpdateState('error');
+    }
+  }
+
   function updateUILanguage(lang) {
     currentUiLang = lang;
     const selectedProvider = els.providerSelect?.value || PROVIDER_CATALOG.defaultProvider;
@@ -233,6 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       updateModelTips(t.tipsModel);
     }
+    renderUpdateState(updateState, availableUpdate);
     const isRestoring = els.mainBtn && els.mainBtn.classList.contains('restoring');
     if (els.btnText) els.btnText.textContent = isRestoring ? t.btnRestore : t.btnTrans;
     chrome.storage.local.get(['modelName', 'provider'], (res) => {
@@ -433,15 +549,16 @@ document.addEventListener('DOMContentLoaded', () => {
     hideModelDropdown();
     updateProviderEndpoint(provider);
 
-    if (provider === 'custom') {
+    if (provider === 'custom' || config.requiresCustomUrl) {
       if (els.customUrl && !preserveModel) els.customUrl.value = "";
-      if (els.customModel && !preserveModel) els.customModel.value = "";
-      populateModelDatalist([]);
+      if (els.customModel && !preserveModel) els.customModel.value = provider === 'custom' ? "" : config.model;
+      populateModelDatalist(provider === 'custom' ? [] : (config.commonModels || []));
     } else {
       if (els.customUrl) els.customUrl.value = config.url;
       if (els.customModel && !preserveModel) els.customModel.value = config.model;
       populateModelDatalist(config.commonModels || []);
     }
+    if (els.customUrl) els.customUrl.placeholder = config.urlPlaceholder || 'https://...';
 
     if (els.customUrlRow) els.customUrlRow.classList.toggle('hidden', isBuiltin);
 
@@ -656,7 +773,7 @@ document.addEventListener('DOMContentLoaded', () => {
     els.saveKeyBtn.addEventListener('click', () => {
       const key = els.apiKey ? els.apiKey.value.trim() : '';
       const provider = els.providerSelect ? els.providerSelect.value : 'deepseek';
-      let apiUrl = els.customUrl ? els.customUrl.value.trim() : '';
+      let apiUrl = normalizeChatCompletionsUrl(els.customUrl ? els.customUrl.value : '');
       let modelName = els.customModel ? els.customModel.value.trim() : '';
 
       if (provider !== 'custom' && PROVIDERS[provider]) {
@@ -666,6 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const pConfig = PROVIDERS[provider];
       const pIsBuiltin = pConfig && pConfig.isBuiltin;
+      const requiresCustomUrl = provider === 'custom' || !!pConfig?.requiresCustomUrl;
 
       if (!pIsBuiltin && provider !== 'custom' && !key) {
         activatePanel('model');
@@ -673,9 +791,9 @@ document.addEventListener('DOMContentLoaded', () => {
         els.apiKey?.focus();
         return;
       }
-      if (provider === 'custom' && !validateApiUrl(apiUrl)) {
+      if (requiresCustomUrl && !validateApiUrl(apiUrl)) {
         activatePanel('model');
-        showFeedback('自定义 API 地址必须使用 HTTPS，本地调试仅允许 localhost。');
+        showFeedback(pConfig?.requiresCustomUrl ? '请填写有效的百炼工作空间 Chat Completions 地址。' : '自定义 API 地址必须使用 HTTPS，本地调试仅允许 localhost。');
         els.customUrl?.focus();
         return;
       }
@@ -835,6 +953,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   panelTabs.forEach(tab => tab.addEventListener('click', () => activatePanel(tab.dataset.panelTarget)));
+  if (els.updateButton) {
+    els.updateButton.addEventListener('click', async () => {
+      if (availableUpdate && updateState === 'available') {
+        await chrome.tabs.create({ url: availableUpdate.downloadUrl });
+        renderUpdateState('downloaded', availableUpdate);
+        return;
+      }
+      await checkForUpdates(true);
+    });
+  }
+  checkForUpdates(false);
   const copyQq = document.getElementById('copy-qq');
   if (copyQq) {
     copyQq.addEventListener('click', async () => {

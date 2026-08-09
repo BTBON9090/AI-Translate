@@ -2,7 +2,7 @@
   "use strict";
 
   const catalog = {
-    version: 20260715,
+    version: 20260809,
     defaultProvider: "deepseek",
     providers: {
       deepseek: {
@@ -26,10 +26,15 @@
         baseUrl: "https://api.moonshot.cn/v1",
         url: "https://api.moonshot.cn/v1/chat/completions",
         modelsUrl: "https://api.moonshot.cn/v1/models",
-        model: "kimi-k2.6",
-        commonModels: ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed"],
+        model: "kimi-k3",
+        commonModels: ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5", "moonshot-v1-auto"],
         modelMigrations: { "kimi-k2-turbo-preview": "kimi-k2.6" },
-        requestOptions: { thinking: { type: "disabled" } },
+        requestOptions: {},
+        modelRequestOptions: {
+          "kimi-k3": { reasoning_effort: "low" },
+          "kimi-k2.6": { thinking: { type: "disabled" } },
+          "kimi-k2.5": { thinking: { type: "disabled" } }
+        },
         docsUrl: "https://platform.kimi.com/docs/api/chat"
       },
       siliconflow: {
@@ -51,18 +56,40 @@
         docsUrl: "https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions"
       },
       qwen: {
-        labelZh: "阿里云百炼（通义千问）",
-        labelEn: "Alibaba Model Studio (Qwen)",
+        labelZh: "阿里云百炼（公共接口）",
+        labelEn: "Alibaba Model Studio (Public)",
         baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         modelsUrl: "",
-        model: "qwen3.6-flash",
-        commonModels: ["qwen3.7-plus", "qwen3.7-max", "qwen3.6-plus", "qwen3.6-flash", "qwen-plus"],
-        modelMigrations: { "qwen-turbo": "qwen3.6-flash" },
+        model: "qwen-plus",
+        commonModels: ["qwen-plus", "qwen-max", "qwen-turbo"],
+        modelMigrations: {
+          "qwen3.7-max": "qwen-plus",
+          "qwen3.7-plus": "qwen-plus",
+          "qwen3.7-flash": "qwen-plus",
+          "qwen3.6-plus": "qwen-plus",
+          "qwen3.6-flash": "qwen-plus"
+        },
         requestOptions: { enable_thinking: false },
         docsUrl: "https://help.aliyun.com/zh/model-studio/base-url",
-        endpointNoteZh: "默认使用北京地域公共地址；API Key 与地域、套餐必须匹配",
-        endpointNoteEn: "Beijing public endpoint; API key, region, and plan must match"
+        endpointNoteZh: "北京公共地址，适用于 qwen-plus 等公共模型",
+        endpointNoteEn: "Beijing public endpoint for shared models such as qwen-plus"
+      },
+      qwen_workspace: {
+        labelZh: "阿里云百炼工作空间（Qwen 3.8）",
+        labelEn: "Alibaba Workspace (Qwen 3.8)",
+        baseUrl: "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        url: "",
+        urlPlaceholder: "https://你的WorkspaceId.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+        modelsUrl: "",
+        model: "qwen3.8-max",
+        commonModels: ["qwen3.8-max", "qwen3.7-plus", "qwen3.7-flash"],
+        modelMigrations: {},
+        requestOptions: { enable_thinking: false },
+        requiresCustomUrl: true,
+        docsUrl: "https://help.aliyun.com/zh/model-studio/getting-started/models",
+        endpointNoteZh: "需填写百炼工作空间专属 Chat Completions 地址，不能使用公共 Base URL",
+        endpointNoteEn: "Requires your workspace Chat Completions URL; the public Base URL is not supported"
       },
       zhipu: {
         labelZh: "智谱 AI 开放平台",
@@ -71,7 +98,7 @@
         url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
         modelsUrl: "",
         model: "glm-5-turbo",
-        commonModels: ["glm-5.1", "glm-5-turbo", "glm-5", "glm-4.7-flash", "glm-4.7-flashx"],
+        commonModels: ["glm-5.2", "glm-5.1", "glm-5-turbo", "glm-5", "glm-4.7-flash", "glm-4.7-flashx"],
         modelMigrations: { "glm-4-plus": "glm-5-turbo" },
         requestOptions: { thinking: { type: "disabled" }, do_sample: false },
         docsUrl: "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%AF%B9%E8%AF%9D%E8%A1%A5%E5%85%A8"

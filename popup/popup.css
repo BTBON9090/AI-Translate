@@ -151,6 +151,15 @@ a { color: inherit; text-decoration: none; }
 .contact-row strong { font-size: 12px; font-weight: 650; }
 .contact-row small { color: var(--text-muted); font-size: 10.5px; }
 .contact-action { flex: 0 0 auto; color: var(--accent); font-size: 10.5px; font-weight: 650; }
+.update-card { margin-top: 10px; padding: 10px 11px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
+.update-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.update-copy strong { font-size: 12px; font-weight: 680; }
+.update-copy small { color: var(--text-muted); font-size: 10px; line-height: 1.35; }
+.update-btn { min-width: 72px; height: 30px; padding: 0 10px; border: 1px solid #bdd1fb; border-radius: 8px; background: var(--accent-soft); color: var(--accent-strong); font-size: 10.5px; font-weight: 680; }
+.update-btn:hover { border-color: var(--accent); background: #cfe0ff; }
+.update-btn:disabled { cursor: wait; opacity: 0.65; }
+.update-btn.available { border-color: transparent; background: var(--accent); color: #fff; }
+.update-notes { grid-column: 1 / -1; margin: 0; padding-top: 7px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 9.5px; line-height: 1.5; white-space: pre-line; }
 .about-privacy { margin: 10px 2px 0; padding: 9px 10px; border-radius: 9px; background: var(--surface-muted); color: var(--text-muted); font-size: 9.5px; line-height: 1.5; }
 .app-footer { margin-top: 10px; color: var(--text-faint); font-size: 9px; text-align: center; }
 

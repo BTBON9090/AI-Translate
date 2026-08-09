@@ -150,8 +150,16 @@
           <a class="contact-row" href="https://xhslink.com/m/78jWEdnemBP" target="_blank" rel="noreferrer"><span><strong>小红书</strong><small>查看更新与设计分享</small></span><span class="contact-action">打开</span></a>
           <a class="contact-row" href="https://www.btbon.cn" target="_blank" rel="noreferrer"><span><strong>个人网站</strong><small>www.btbon.cn</small></span><span class="contact-action">访问</span></a>
         </div>
+        <section class="update-card" aria-labelledby="update-title">
+          <div class="update-copy">
+            <strong id="update-title">版本更新</strong>
+            <small id="update-status" role="status" aria-live="polite">正在检查最新版…</small>
+          </div>
+          <button id="check-update-btn" class="update-btn" type="button">检查更新</button>
+          <p id="update-notes" class="update-notes hidden"></p>
+        </section>
         <p class="about-privacy">隐私说明：API Key 保存在本地。翻译时，所选文字或网页文本会发送至当前配置的模型服务商。</p>
-        <footer class="app-footer">AI 极简翻译 v1.6.0 · © 2026 BTBON</footer>
+        <footer class="app-footer">AI 极简翻译 v<span id="current-version">—</span> · © 2026 BTBON</footer>
       </section>
     </main>
   </div>
