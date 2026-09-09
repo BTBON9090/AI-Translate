@@ -1,0 +1,32 @@
+# AI 极简翻译
+
+Chrome Manifest V3 扩展，支持网页双语翻译、划词解释和输入翻译。
+
+## 使用
+
+解压发布 ZIP，在 `chrome://extensions` 打开开发者模式，选择“加载已解压的扩展程序”。更新后在该页重新加载扩展并刷新已打开的网页。
+
+在“模型”中选择服务商、协议，填写对应 API 地址和 Key，点击“检测并获取模型”，选择模型 ID 后保存。检测仅查询模型列表，不生成测试文本。手动输入同样可用。服务地址区别见 [服务商说明](docs/providers.md)。
+
+“输入翻译”支持粘贴文本、选择目标语言、翻译、精细解释和复制；“网页”提供双语样式和始终翻译该网站；划词后点击按钮打开结果，点击解读展开详细说明。
+
+API Key 与翻译缓存保存在当前浏览器。翻译时文本及必要的划词上下文会发送给所选服务商。输入文本不额外保存草稿，成功结果会进入本地缓存；可在“关于”中清除缓存。
+
+## 开发与验证
+
+```sh
+npm install
+npx playwright install chromium
+npm run check
+npm test
+npm run test:browser
+npm run build
+```
+
+浏览器测试使用临时用户目录与本地模拟接口，不读取真实用户配置，不调用付费模型。截图输出到 `dist/qa/`。打包白名单只包含扩展运行文件和图标，不包含测试、依赖、密钥和缓存。
+
+## 发布
+
+确认验证通过后运行 `npm run build`。将版本 ZIP 上传到 COS 的 `releases/`，核验内容，再更新 `releases/AI-Translate-latest.zip` 和 `update_manifest.json`。更新清单包含版本、SHA-256、大小及中英文说明。
+
+详见 [更新记录](CHANGELOG.md)。

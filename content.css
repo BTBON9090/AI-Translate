@@ -252,3 +252,16 @@
   .ai-card-action:not(.ai-close-btn) > span:last-child { display: none !important; }
   .ai-card-action { width: 32px !important; padding: 0 !important; }
 }
+
+.ai-translator-bubble.visible[data-edge="right"] { transform: translateX(12px) !important; border-radius: 21px 0 0 21px !important; }
+.ai-translator-bubble.visible[data-edge="left"] { transform: translateX(-12px) !important; border-radius: 0 21px 21px 0 !important; }
+.ai-translator-bubble.visible:hover, .ai-translator-bubble.visible:focus-visible, .ai-translator-bubble.visible.is-dragging { transform: none !important; }
+.ai-translator-bubble.is-dragging { transition: none !important; cursor: grabbing !important; }
+.ai-card { max-height: calc(100dvh - 16px) !important; max-width: calc(100vw - 16px) !important; display: flex !important; flex-direction: column !important; }
+.ai-card-header { flex-shrink: 0 !important; }
+.ai-card-body { min-height: 0 !important; overflow-y: auto !important; overscroll-behavior: contain !important; }
+.ai-card-source { max-height: 82px !important; overflow: auto !important; padding-bottom: 10px !important; margin-bottom: 12px !important; border-bottom: 1px solid var(--ai-border) !important; color: var(--ai-text-muted) !important; font-size: 12px !important; line-height: 1.6 !important; white-space: pre-wrap !important; overflow-wrap: anywhere !important; }
+.ai-card [hidden] { display: none !important; }
+.ai-card-action { min-height: 30px !important; }
+.ai-card-translation, .ai-card-explanation { white-space: pre-wrap !important; overflow-wrap: anywhere !important; }
+@media (prefers-reduced-motion: reduce) { .ai-translator-bubble, .ai-card, .ai-card * { animation: none !important; transition: none !important; } }

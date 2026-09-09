@@ -23,13 +23,29 @@
     </header>
 
     <nav class="panel-tabs" aria-label="插件面板">
-      <button class="panel-tab active" type="button" data-panel-target="translate" aria-selected="true">翻译</button>
+      <button class="panel-tab active" type="button" data-panel-target="text" aria-selected="true">输入翻译</button>
+      <button class="panel-tab" type="button" data-panel-target="translate" aria-selected="false">网页</button>
       <button class="panel-tab" type="button" data-panel-target="model" aria-selected="false">模型</button>
       <button class="panel-tab" type="button" data-panel-target="about" aria-selected="false">关于</button>
     </nav>
 
+    <p id="panel-feedback" class="panel-feedback" role="status" aria-live="polite"></p>
     <main>
-      <section class="panel-view" data-panel="translate">
+      <section class="panel-view" data-panel="text">
+        <div class="section-heading"><div><h2>随手输入，即刻读懂</h2><p>单词查释义，句子看翻译</p></div></div>
+        <label class="field-block" for="text-input"><span>原文</span>
+          <textarea id="text-input" maxlength="16000" rows="5" dir="auto" placeholder="输入或粘贴文字…"></textarea>
+        </label>
+        <div class="text-meta"><span id="text-count">0 / 16000</span><button id="clear-text" class="text-icon-btn" type="button">清空</button></div>
+        <label class="field-block" for="text-target"><span>目标语言</span><select id="text-target" class="modern-select full-width-select"></select></label>
+        <div class="text-actions"><button id="translate-text" class="save-btn" type="button">翻译</button><button id="explain-text" class="secondary-btn" type="button">精细解释</button><button id="stop-text" class="secondary-btn hidden" type="button">停止</button></div>
+        <p id="text-status" class="field-tips" role="status" aria-live="polite">Ctrl / ⌘ + Enter 翻译</p>
+        <section class="text-result hidden" id="text-result-wrap" aria-label="翻译结果">
+          <div class="result-toolbar"><strong id="result-heading">翻译结果</strong><button id="copy-text" class="text-icon-btn" type="button">复制</button></div>
+          <div id="text-result" dir="auto" tabindex="0"></div>
+        </section>
+      </section>
+      <section class="panel-view hidden" data-panel="translate">
         <button id="main-action-btn" class="primary-action" type="button">
           <span class="action-icon" aria-hidden="true">
             <svg viewBox="0 0 256 256"><path fill="currentColor" d="m247.15 212.42-56-112a8 8 0 0 0-14.31 0l-21.71 43.43A88 88 0 0 1 108 126.93 103.65 103.65 0 0 0 135.69 64H160a8 8 0 0 0 0-16h-56V32a8 8 0 0 0-16 0v16H32a8 8 0 0 0 0 16h87.63A87.76 87.76 0 0 1 96 116.35a87.7 87.7 0 0 1-19-31 8 8 0 1 0-15.08 5.34A103.6 103.6 0 0 0 84 127a87.55 87.55 0 0 1-52 17 8 8 0 0 0 0 16 103.46 103.46 0 0 0 64-22.08 104.2 104.2 0 0 0 51.44 21.31l-26.6 53.19a8 8 0 0 0 14.31 7.16L148.94 192h70.11l13.79 27.58A8 8 0 0 0 240 224a8 8 0 0 0 7.15-11.58M156.94 176 184 121.89 211.05 176Z"/></svg>
@@ -40,7 +56,7 @@
           </span>
           <span class="action-arrow" aria-hidden="true">→</span>
         </button>
-        <p id="panel-feedback" class="panel-feedback" role="status" aria-live="polite"></p>
+
 
         <div class="section-heading">
           <h2>翻译偏好</h2>
@@ -87,7 +103,7 @@
       <section class="panel-view hidden" data-panel="model">
         <div class="section-heading model-heading">
           <div><h2 id="lbl-api-header">模型连接</h2><p>连接一次，网页与划词翻译共用</p></div>
-          <span class="secure-label">本地保存</span>
+          <a id="provider-docs" class="secure-label" target="_blank" rel="noreferrer">官方文档</a>
         </div>
         <div id="api-panel" class="model-form">
           <label class="field-block" for="provider-select">
@@ -99,31 +115,16 @@
           </label>
 
           <div id="custom-options" class="custom-options">
-            <label class="field-block" id="model-name-row" for="custom-model-name">
-              <span id="lbl-model-name">模型名称</span>
-              <span class="input-wrapper model-select-wrapper">
-                <input type="text" id="custom-model-name" placeholder="例如 deepseek-v4-flash" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-controls="model-dropdown" aria-expanded="false">
-                <span class="input-actions">
-                  <button class="text-icon-btn model-dropdown-btn" id="model-dropdown-btn" type="button" title="选择模型">选择</button>
-                  <button class="text-icon-btn refresh-models-btn" id="refresh-models-btn" type="button" title="刷新模型列表">刷新</button>
-                  <button class="text-icon-btn clear-btn" type="button" data-target="custom-model-name">清除</button>
-                </span>
-                <span class="model-dropdown hidden" id="model-dropdown" role="listbox"></span>
-              </span>
-              <small class="field-tips" id="tips-model-name">可选择推荐模型，也可直接输入</small>
-            </label>
+            <label class="field-block" for="api-protocol"><span>接口协议</span><select id="api-protocol" class="modern-select full-width-select"><option value="openai">OpenAI · Chat Completions</option><option value="anthropic">Anthropic · Messages</option><option value="responses">OpenAI · Responses</option></select></label>
             <label class="field-block hidden" id="custom-url-row" for="custom-api-url">
-              <span>Chat Completions 地址</span>
+              <span>API 地址 / Base URL</span>
               <span class="input-wrapper">
                 <input type="url" id="custom-api-url" placeholder="https://..." autocomplete="off" spellcheck="false">
                 <span class="input-actions"><button class="text-icon-btn clear-btn" type="button" data-target="custom-api-url">清除</button></span>
               </span>
               <small class="field-tips">仅允许 HTTPS，本地调试可使用 localhost</small>
             </label>
-          </div>
-
-          <div class="api-key-area">
-            <label class="field-block" for="api-key">
+<div id="key-detection">            <label class="field-block" for="api-key">
               <span>API Key</span>
               <span class="input-wrapper">
                 <input type="password" id="api-key" placeholder="sk-..." autocomplete="off" spellcheck="false">
@@ -134,6 +135,25 @@
               </span>
             </label>
             <p class="api-tips" id="lbl-api-tips">Key 仅保存在浏览器本地。网页文本会发送到你选择的模型服务商。</p>
+            <button id="detect-models" class="secondary-btn full-width-select" type="button">检测并获取模型</button>
+</div>
+            <label class="field-block" id="model-name-row" for="custom-model-name">
+              <span id="lbl-model-name">模型名称</span>
+              <span class="input-wrapper model-select-wrapper">
+                <input type="text" id="custom-model-name" placeholder="例如 deepseek-v4-flash" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-controls="model-dropdown" aria-expanded="false">
+                <span class="input-actions">
+                  <button class="text-icon-btn model-dropdown-btn" id="model-dropdown-btn" type="button" title="选择模型">选择</button>
+                  <button class="text-icon-btn refresh-models-btn" id="refresh-models-btn" type="button" title="刷新模型列表">检测</button>
+                  <button class="text-icon-btn clear-btn" type="button" data-target="custom-model-name">清除</button>
+                </span>
+                <span class="model-dropdown hidden" id="model-dropdown" role="listbox"></span>
+              </span>
+              <small class="field-tips" id="tips-model-name">可选择推荐模型，也可直接输入</small>
+            </label>
+
+          </div>
+
+          <div class="api-key-area">
             <button id="save-key-btn" class="save-btn" type="button">保存并使用</button>
           </div>
         </div>
@@ -159,11 +179,14 @@
           <p id="update-notes" class="update-notes hidden"></p>
         </section>
         <p class="about-privacy">隐私说明：API Key 保存在本地。翻译时，所选文字或网页文本会发送至当前配置的模型服务商。</p>
+        <section class="update-card"><div class="update-copy"><strong>翻译缓存</strong><small id="cache-info"></small></div><button id="clear-cache" class="update-btn" type="button">清除缓存</button><p class="update-notes">已完成的段落在本地复用，最长保留 90 天。</p></section>
         <footer class="app-footer">AI 极简翻译 v<span id="current-version">—</span> · © 2026 BTBON</footer>
       </section>
     </main>
   </div>
   <script src="../providers.js"></script>
+  <script src="../protocol.js"></script>
+  <script src="i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

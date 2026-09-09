@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI 极简翻译",
-  "version": "2.0.2",
-  "description": "快速、准确、节省 Token 的网页与划词翻译插件。",
+  "version": "2.1.0",
+  "description": "网页、划词与输入翻译，支持段落缓存及 OpenAI、Anthropic、Responses 协议。",
   "permissions": [
     "storage",
     "activeTab",
@@ -21,9 +21,16 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*/*", "http://*/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],

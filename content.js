@@ -22,6 +22,12 @@ const PROGRESSIVE_SCAN_DELAY_MS = 120;
 const PROGRESSIVE_PRELOAD_SCREENS = 1;
 const EXTENSION_RECOVERY_KEY = '__ai_translator_resume_after_extension_reload__';
 let extensionRecoveryStarted = false;
+let uiLang = 'zh';
+let selectionManager = null;
+const tr = (zh, en) => uiLang === 'en' ? en : zh;
+let scanRunning = false;
+let scanAgain = false;
+const blockRecords = new WeakMap();
 
 function hasLiveExtensionContext() {
   try {
@@ -39,15 +45,16 @@ function recoverInvalidatedExtensionContext(error = null) {
   if (hasLiveExtensionContext() && !isExtensionContextError(error)) return false;
   if (extensionRecoveryStarted) return true;
   extensionRecoveryStarted = true;
-  try { sessionStorage.setItem(EXTENSION_RECOVERY_KEY, 'translate'); } catch {}
-  window.location.reload();
+  if (isTranslating) disablePageTranslation();
+  removeBubble();
+  console.info('AI Translate updated. Reload this page to use the new extension.');
   return true;
 }
 
 async function getLocalSettings(keys) {
   if (recoverInvalidatedExtensionContext()) return null;
   try {
-    return await chrome.storage.local.get(keys);
+    return await chrome.runtime.sendMessage({ action: 'GET_SETTINGS' });
   } catch (error) {
     if (!recoverInvalidatedExtensionContext(error)) {
       console.warn('读取插件设置失败', error);
@@ -69,7 +76,9 @@ function consumeExtensionRecoveryRequest() {
 function init() {
   const shouldResumeTranslation = consumeExtensionRecoveryRequest();
   try {
-    chrome.storage.local.get(['showBubble'], (result) => {
+    getLocalSettings().then((result) => {
+      if (!result) return;
+      uiLang = result.uiLang || 'zh';
       if (result.showBubble !== false) createBubble();
       if (shouldResumeTranslation) enablePageTranslation('manual');
       else checkAutoTranslate();
@@ -79,7 +88,7 @@ function init() {
     return;
   }
   
-  new ModernSelectionManager();
+  selectionManager = new ModernSelectionManager();
 
   setupMutationObserver();
 
@@ -111,6 +120,7 @@ function init() {
         return;
       }
       pageManager.processQueue();
+      scheduleProgressiveScan();
     }
   });
 }
@@ -137,7 +147,8 @@ function scheduleAutoTranslateCheck(delay) {
 function checkAutoTranslate(expectedUrl = window.location.href, expectedEpoch = navigationEpoch) {
   if (!hasLiveExtensionContext()) return;
   try {
-    chrome.storage.local.get(['autoSites'], (result) => {
+    getLocalSettings().then((result) => {
+      if (!result) return;
       if (expectedEpoch !== navigationEpoch || expectedUrl !== window.location.href) return;
       const currentHost = window.location.hostname;
       const autoSites = result.autoSites || [];
@@ -173,11 +184,19 @@ function setupMutationObserver() {
         .ai-trans-minimal-block-display,
         .ai-translate-block,
         .ai-trans-replacement,
-        .ai-origin-text,
         .ai-card,
         .ai-selection-btn
       `)) return false;
-      pendingMutationRoots.add(root);
+      const marked = root.closest('[data-ai-translated]');
+      const record = marked && blockRecords.get(marked);
+      if (record) {
+        const currentText = record.nodes.filter(n => n.isConnected).map(n => n.nodeValue).join('').trim();
+        if (currentText !== record.source || !record.ui.isConnected || (node.nodeType === Node.TEXT_NODE && !record.nodes.includes(node)) || (root !== marked && !record.nodes.some(n => root.contains(n)))) {
+          record.ui.remove(); marked.removeAttribute(TRANSLATION_MARK_ATTR);
+          marked.querySelectorAll('.ai-origin-text').forEach(el => { el.classList.remove('hidden'); el.replaceWith(...el.childNodes); });
+        } else return false;
+      }
+      if (pendingMutationRoots.size < 100) pendingMutationRoots.add(root);
       return true;
     };
 
@@ -187,6 +206,8 @@ function setupMutationObserver() {
         for (const node of mutation.addedNodes) {
           if (queueMutationRoot(node)) hasMeaningfulChange = true;
         }
+      } else if (mutation.type === 'childList' && mutation.removedNodes.length && queueMutationRoot(mutation.target)) {
+        hasMeaningfulChange = true;
       } else if (mutation.type === 'characterData' && queueMutationRoot(mutation.target)) {
         hasMeaningfulChange = true;
       } else if (mutation.type === 'attributes' && queueMutationRoot(mutation.target)) {
@@ -196,8 +217,9 @@ function setupMutationObserver() {
 
     if (!hasMeaningfulChange) return;
 
-    if (mutationDebounceTimer) clearTimeout(mutationDebounceTimer);
+    if (mutationDebounceTimer) return;
     mutationDebounceTimer = setTimeout(() => {
+       mutationDebounceTimer = null;
        if (isTranslating) {
          const roots = [...pendingMutationRoots];
          pendingMutationRoots.clear();
@@ -211,8 +233,7 @@ function setupMutationObserver() {
   observer.observe(document.body, {
     childList: true,
     subtree: true,
-    attributes: true,
-    attributeFilter: ['class', 'style', 'hidden'],
+    attributes: false,
     characterData: true
   });
 }
@@ -225,7 +246,7 @@ function createBubble() {
   bubble.innerHTML = ICON_SVG;
   bubble.setAttribute('role', 'button');
   bubble.setAttribute('tabindex', '0');
-  bubble.setAttribute('aria-label', '翻译当前页面');
+  bubble.setAttribute('aria-label', tr('翻译当前页面', 'Translate page'));
   // 同时写入关键几何属性，避免网页的高权重样式把圆形气泡覆盖成圆角方形。
   bubble.style.setProperty('width', '42px', 'important');
   bubble.style.setProperty('height', '42px', 'important');
@@ -259,7 +280,7 @@ function updateBubbleState(active) {
 
 function removeBubble() {
   const bubble = document.querySelector('.ai-translator-bubble');
-  if (bubble) bubble.remove();
+  if (bubble) { bubble.cleanupDrag?.(); bubble.remove(); }
 }
 
 function setBubbleLoading(isLoading) {
@@ -271,26 +292,48 @@ function setBubbleLoading(isLoading) {
 }
 
 function setupDrag(el) {
-  let isDragging = false, startX, startY, initialLeft, initialTop, moveDistance = 0;
-  el.addEventListener('mousedown', (e) => {
-    isDragging = true; moveDistance = 0; el.style.transition = 'none';
-    startX = e.clientX; startY = e.clientY;
+  let start = null;
+  let side = 'right';
+  let y = .7;
+  const set = (key, value) => el.style.setProperty(key, value, 'important');
+  function dock() {
+    const maxY = Math.max(8, window.innerHeight - 50);
+    set('right', 'auto'); set('bottom', 'auto');
+    set('left', side === 'left' ? '0px' : `${Math.max(0, window.innerWidth - 42)}px`);
+    set('top', `${Math.min(maxY, Math.max(8, y * maxY))}px`);
+    el.dataset.edge = side;
+    el.classList.remove('is-dragging');
+  }
+  getLocalSettings().then(settings => { if (!el.isConnected || start) return; side = settings?.bubblePosition?.side || side; y = settings?.bubblePosition?.y ?? y; dock(); });
+  el.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
     const rect = el.getBoundingClientRect();
-    initialLeft = rect.left; initialTop = rect.top; el.dataset.isDragging = 'false';
+    start = { x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+    el.dataset.isDragging = 'false';
+    el.setPointerCapture(event.pointerId);
   });
-  window.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    moveDistance += Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY);
-    if (moveDistance > 5) el.dataset.isDragging = 'true';
-    el.style.left = `${initialLeft + (e.clientX - startX)}px`;
-    el.style.top = `${initialTop + (e.clientY - startY)}px`;
+  el.addEventListener('pointermove', event => {
+    if (!start) return;
+    const dx = event.clientX - start.x, dy = event.clientY - start.y;
+    if (Math.hypot(dx, dy) < 5 && el.dataset.isDragging !== 'true') return;
+    el.dataset.isDragging = 'true'; el.classList.add('is-dragging');
+    set('left', `${Math.max(0, Math.min(window.innerWidth - 42, start.left + dx))}px`);
+    set('top', `${Math.max(8, Math.min(window.innerHeight - 50, start.top + dy))}px`);
   });
-  window.addEventListener('mouseup', () => {
-    if (!isDragging) return;
-    isDragging = false; el.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-    const rect = el.getBoundingClientRect();
-    el.style.left = rect.left + rect.width / 2 < window.innerWidth / 2 ? '16px' : `${window.innerWidth - rect.width - 16}px`;
-  });
+  const finish = () => {
+    if (!start) return;
+    start = null;
+    side = el.offsetLeft + 21 < window.innerWidth / 2 ? 'left' : 'right';
+    y = el.offsetTop / Math.max(8, window.innerHeight - 50);
+    dock();
+    chrome.runtime.sendMessage({ action: 'SAVE_BUBBLE_POSITION', position: { side, y } }).catch(() => {});
+  };
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
+  const resize = () => { if (el.isConnected) dock(); else window.removeEventListener('resize', resize); };
+  window.addEventListener('resize', resize, { passive: true });
+  el.cleanupDrag = () => window.removeEventListener('resize', resize);
+  dock();
 }
 
 class ModernSelectionManager {
@@ -298,6 +341,9 @@ class ModernSelectionManager {
     this.button = null;
     this.card = null;
     this.selectionText = '';
+    this.context = '';
+    this.openId = 0;
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') { this.hideButton(); this.closeCard(); } });
     this.handleMouseUp = this.handleMouseUp.bind(this);
     this.handlePointerDown = this.handlePointerDown.bind(this);
     document.addEventListener('mouseup', this.handleMouseUp, { passive: true });
@@ -353,6 +399,11 @@ class ModernSelectionManager {
       }
       if (!rect || (!rect.width && !rect.height)) return;
       this.selectionText = sourceText;
+      const contextElement = selection?.anchorNode?.parentElement?.closest('p,li,blockquote,h1,h2,h3');
+      const contextCopy = contextElement?.cloneNode(true);
+      contextCopy?.querySelectorAll('.ai-trans-minimal,.ai-trans-replacement,.ai-translate-block').forEach(el => el.remove());
+      this.context = contextCopy?.textContent?.replace(/\s+/g, ' ').slice(0, 800) || '';
+      if (this.context === sourceText || sourceText.length > 160) this.context = '';
       this.showButton(rect);
     }, 0);
   }
@@ -369,7 +420,7 @@ class ModernSelectionManager {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'ai-selection-btn';
-    button.setAttribute('aria-label', '翻译选中文字');
+    button.setAttribute('aria-label', tr('翻译选中文字', 'Translate selection'));
     button.innerHTML = ICONS.translate;
     const left = Math.min(window.innerWidth - 44, Math.max(8, selectionRect.right + 8));
     const top = Math.min(window.innerHeight - 44, Math.max(8, selectionRect.bottom + 8));
@@ -391,6 +442,8 @@ class ModernSelectionManager {
   }
 
   closeCard() {
+    this.openId++;
+    this.card?.cleanup?.();
     if (!this.card) return;
     pageManager.cancelTasksForElement(this.card);
     this.card.remove();
@@ -399,8 +452,12 @@ class ModernSelectionManager {
 
   async showCard(selectionRect) {
     this.closeCard();
+    const openId = this.openId;
+    const selectedText = this.selectionText;
+    const selectedContext = this.context;
     const settings = await getLocalSettings(['targetLang', 'precisionMode', 'provider', 'modelName']);
-    if (!settings) return;
+    if (!settings || openId !== this.openId) return;
+    uiLang = settings.uiLang || uiLang;
     const providerLabels = {
       deepseek: 'DeepSeek', qwen: 'Qwen', siliconflow: 'SiliconFlow', moonshot: 'Kimi',
       zhipu: 'GLM', zhipu_free: 'GLM 免费模型', custom: '自定义模型'
@@ -410,7 +467,7 @@ class ModernSelectionManager {
     const card = document.createElement('section');
     card.className = 'ai-card';
     card.setAttribute('role', 'dialog');
-    card.setAttribute('aria-label', '划词翻译结果');
+    card.setAttribute('aria-label', tr('划词翻译结果', 'Translation result'));
 
     const header = document.createElement('header');
     header.className = 'ai-card-header';
@@ -425,10 +482,10 @@ class ModernSelectionManager {
 
     const actions = document.createElement('div');
     actions.className = 'ai-card-actions';
-    const explainButton = this.createActionButton('解读', ICONS.lightbulb, 'ai-explain-btn');
-    const copyButton = this.createActionButton('复制', ICONS.copy, 'ai-copy-btn');
+    const explainButton = this.createActionButton(tr('解读', 'Explain'), ICONS.lightbulb, 'ai-explain-btn');
+    const copyButton = this.createActionButton(tr('复制', 'Copy'), ICONS.copy, 'ai-copy-btn');
     const closeButton = this.createActionButton('', ICONS.close, 'ai-close-btn');
-    closeButton.setAttribute('aria-label', '关闭');
+    closeButton.setAttribute('aria-label', tr('关闭', 'Close'));
     actions.append(explainButton, copyButton, closeButton);
     header.append(brand, actions);
 
@@ -436,8 +493,11 @@ class ModernSelectionManager {
     body.className = 'ai-card-body';
     const translation = document.createElement('div');
     translation.className = 'ai-card-translation';
-    this.renderLoading(translation, '正在翻译');
-    body.appendChild(translation);
+    this.renderLoading(translation, tr('正在翻译', 'Translating'));
+    const source = document.createElement('div');
+    source.className = 'ai-card-source'; source.textContent = selectedText; source.dir = 'auto';
+    translation.dir = 'auto';
+    body.append(source, translation);
     card.append(header, body);
 
     const cardWidth = Math.min(380, window.innerWidth - 16);
@@ -452,6 +512,13 @@ class ModernSelectionManager {
     card.style.top = `${top}px`;
     document.documentElement.appendChild(card);
     this.card = card;
+    card.tabIndex = -1; card.focus({ preventScroll: true });
+    const fit = () => { card.style.top = `${Math.max(8, Math.min(parseFloat(card.style.top), window.innerHeight - card.offsetHeight - 8))}px`; card.style.left = `${Math.max(8, Math.min(parseFloat(card.style.left), window.innerWidth - card.offsetWidth - 8))}px`; };
+    const sizeObserver = new ResizeObserver(fit); sizeObserver.observe(card);
+    window.addEventListener('resize', fit);
+    card.cleanup = () => { sizeObserver.disconnect(); window.removeEventListener('resize', fit); };
+    let explanation = null;
+    let explained = false;
 
     closeButton.addEventListener('click', () => this.closeCard());
     copyButton.addEventListener('click', async () => {
@@ -459,32 +526,34 @@ class ModernSelectionManager {
       if (!value) return;
       try {
         await navigator.clipboard.writeText(value);
-        copyButton.querySelector('span:last-child').textContent = '已复制';
+        copyButton.querySelector('span:last-child').textContent = tr('已复制', 'Copied');
         window.setTimeout(() => {
-          if (copyButton.isConnected) copyButton.querySelector('span:last-child').textContent = '复制';
+          if (copyButton.isConnected) copyButton.querySelector('span:last-child').textContent = tr('复制', 'Copy');
         }, 1200);
       } catch {
-        copyButton.querySelector('span:last-child').textContent = '复制失败';
+        copyButton.querySelector('span:last-child').textContent = tr('复制失败', 'Copy failed');
       }
     });
     explainButton.addEventListener('click', () => {
       if (explainButton.disabled) return;
+      if (explained) { explanation.hidden = !explanation.hidden; return; }
       explainButton.disabled = true;
-      explainButton.querySelector('span:last-child').textContent = '解读中';
-      const explanation = document.createElement('div');
+      explainButton.querySelector('span:last-child').textContent = tr('解读中', 'Explaining');
+      if (!explanation) explanation = document.createElement('div');
       explanation.className = 'ai-card-explanation';
-      this.renderLoading(explanation, '正在分析语境');
+      this.renderLoading(explanation, tr('正在分析语境', 'Analyzing context'));
       body.appendChild(explanation);
-      const explainTask = pageManager.addDirectTask(this.selectionText, explanation, settings.targetLang || 'zh', false, 'explain');
+      const explainTask = pageManager.addDirectTask(selectedText, explanation, settings.targetLang || 'zh', false, 'explain', selectedContext);
       explainTask.onDone = success => {
         if (!explainButton.isConnected) return;
         explainButton.disabled = false;
-        explainButton.querySelector('span:last-child').textContent = success ? '已解读' : '重试解读';
+        explained = success;
+        explainButton.querySelector('span:last-child').textContent = success ? tr('已解读', 'Explained') : tr('重试解读', 'Retry explanation');
       };
     });
 
     this.setupCardDrag(card, header);
-    pageManager.addDirectTask(this.selectionText, translation, settings.targetLang || 'zh', settings.precisionMode === true);
+    pageManager.addDirectTask(selectedText, translation, settings.targetLang || 'zh', false, 'dictionary', selectedContext);
   }
 
   createActionButton(label, icon, className) {
@@ -525,8 +594,8 @@ class ModernSelectionManager {
     let startTop = 0;
     const onMove = event => {
       if (!dragging) return;
-      const nextLeft = Math.min(window.innerWidth - card.offsetWidth - 8, Math.max(8, startLeft + event.clientX - startX));
-      const nextTop = Math.min(window.innerHeight - card.offsetHeight - 8, Math.max(8, startTop + event.clientY - startY));
+      const nextLeft = Math.max(8, Math.min(window.innerWidth - card.offsetWidth - 8, startLeft + event.clientX - startX));
+      const nextTop = Math.max(8, Math.min(window.innerHeight - card.offsetHeight - 8, startTop + event.clientY - startY));
       card.style.left = `${nextLeft}px`;
       card.style.top = `${nextTop}px`;
     };
@@ -536,6 +605,7 @@ class ModernSelectionManager {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
+    const cleanup = card.cleanup; card.cleanup = () => { onUp(); cleanup?.(); };
     handle.addEventListener('mousedown', event => {
       if (event.target.closest('button')) return;
       dragging = true;
@@ -565,6 +635,8 @@ function isBlockContainer(el) {
 
 function getLogicalBlock(node) {
   let curr = node.parentElement;
+  const semantic = curr?.closest('p,h1,h2,h3,h4,h5,h6,td,th,figcaption,blockquote');
+  if (semantic && !curr.closest('[data-ai-translated],script,style,code,pre,button,textarea,input')) return semantic;
   while (curr && curr !== document.body) {
     if (INVALID_TAGS.includes(curr.tagName)) return null;
     if (curr.getAttribute(TRANSLATION_MARK_ATTR)) return null;
@@ -576,18 +648,23 @@ function getLogicalBlock(node) {
   return node.parentElement !== document.body ? node.parentElement : null;
 }
 
-function scanTranslatableElements(root = document.body) {
+async function scanTranslatableElements(root = document.body, sessionId = translationSessionId) {
   const rawBlocks = [];
-  let currentBlock = null;
+  const groups = new Map();
 
   if (!(root instanceof Element) || root.closest('.ai-card, .ai-selection-btn, .ai-translator-bubble')) return [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.matches('script,style,noscript,code,pre,svg,math,textarea,input,select,button,[contenteditable],[data-ai-translated],.ai-card,.ai-selection-btn,.ai-translator-bubble,.ai-trans-minimal,.ai-trans-replacement,.ai-translate-block,.ai-origin-text')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
       if (!node || !node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
       const parent = node.parentElement;
       if (parent.closest('script, style, noscript, code, pre, svg, math, textarea, audio, video, canvas, input, select, button')) {
         return NodeFilter.FILTER_REJECT;
       }
+      if (parent.closest('[data-ai-translated],.ai-card,.ai-translator-bubble,.ai-selection-btn')) return NodeFilter.FILTER_REJECT;
       const style = window.getComputedStyle(parent);
       if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
         return NodeFilter.FILTER_REJECT;
@@ -601,17 +678,22 @@ function scanTranslatableElements(root = document.body) {
   });
 
   let currentNode;
+  let sliceStart = performance.now();
   while (currentNode = walker.nextNode()) {
+    if (performance.now() - sliceStart > 8) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (sessionId !== translationSessionId || !isTranslating) return [];
+      sliceStart = performance.now();
+    }
+    if (currentNode.nodeType !== Node.TEXT_NODE) continue;
     const container = getLogicalBlock(currentNode);
     if (!container) continue;
+    const rect = container.getBoundingClientRect();
+    if (rect.bottom < -window.innerHeight * .35 || rect.top > window.innerHeight * 2) continue;
 
-    // 线性扫描，连续归组：容器变化时开启新块
-    if (currentBlock && currentBlock.container === container) {
-       currentBlock.textNodes.push(currentNode);
-    } else {
-       currentBlock = { container: container, textNodes: [currentNode] };
-       rawBlocks.push(currentBlock);
-    }
+    let block = groups.get(container);
+    if (!block) { block = { container, textNodes: [] }; groups.set(container, block); rawBlocks.push(block); }
+    block.textNodes.push(currentNode);
   }
 
   // --- 过滤与组装 ---
@@ -622,6 +704,7 @@ function scanTranslatableElements(root = document.body) {
     const fullText = block.textNodes.map(n => n.nodeValue).join('').trim();
     
     // 长度太短的跳过 (小于2个字符通常是无意义的，除非是中文)
+    if (fullText.length > 16000) return;
     if (fullText.length < 2 && !/[\u4e00-\u9fa5]/.test(fullText)) return;
 
     // 纯数字/符号/单位
@@ -649,12 +732,12 @@ function scanTranslatableElements(root = document.body) {
   return validBlocks;
 }
 
-function getProgressiveBlocks(root = document.body) {
+async function getProgressiveBlocks(root = document.body, sessionId) {
   const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
   const topLimit = -Math.round(viewportHeight * 0.35);
   const bottomLimit = viewportHeight * (1 + PROGRESSIVE_PRELOAD_SCREENS);
 
-  return scanTranslatableElements(root)
+  return (await scanTranslatableElements(root, sessionId))
     .filter(block => {
       const rect = block.container.getBoundingClientRect();
       return rect.bottom >= topLimit && rect.top <= bottomLimit;
@@ -662,14 +745,20 @@ function getProgressiveBlocks(root = document.body) {
     .sort((a, b) => a.container.getBoundingClientRect().top - b.container.getBoundingClientRect().top);
 }
 
-function runProgressiveScan(sessionId) {
+async function runProgressiveScan(sessionId) {
   progressiveScrollTimer = null;
   if (!progressiveScrollHandler || !isTranslating || sessionId !== translationSessionId || translationUrl !== window.location.href) return;
-  const blocks = getProgressiveBlocks(document.body);
-  if (blocks.length) {
-    pageManager.addTasks(blocks, pageManager.settings, false, crypto.randomUUID());
-  } else {
-    pageManager.processQueue();
+  if (document.hidden || pageManager.queue.length > 12) return;
+  if (scanRunning) { scanAgain = true; return; }
+  scanRunning = true;
+  try {
+    const blocks = await getProgressiveBlocks(document.body, sessionId);
+    if (sessionId !== translationSessionId || !isTranslating) return;
+    if (blocks.length) pageManager.addTasks(blocks.slice(0, 120), pageManager.settings, false, crypto.randomUUID());
+    else pageManager.processQueue();
+  } finally {
+    scanRunning = false;
+    if (scanAgain) { scanAgain = false; scheduleProgressiveScan(translationSessionId, 300); }
   }
 }
 
@@ -702,7 +791,7 @@ class TranslationManager {
   constructor() {
     this.queue = [];
     this.activeCount = 0;
-    this.concurrency = 4;
+    this.concurrency = 2;
     // 为划词翻译预留独立名额，全屏翻译再忙也能立即响应划词。
     this.cardConcurrency = 1;
     this.activeCardCount = 0;
@@ -782,6 +871,7 @@ class TranslationManager {
       }
 
       block.container.setAttribute(TRANSLATION_MARK_ATTR, 'true');
+      blockRecords.set(block.container, { ui: transUi, nodes: block.textNodes, source: block.originalText });
 
       rawTasks.push({
         text: block.originalText,
@@ -844,9 +934,10 @@ class TranslationManager {
     this.processQueue();
   }
 
-  addDirectTask(text, outputEl, targetLang, precisionMode, modeOverride = null) {
+  addDirectTask(text, outputEl, targetLang, precisionMode, modeOverride = null, context = '') {
      const task = {
        type: 'card',
+       context,
        text: text,
        ui: outputEl,
        targetLang: targetLang,
@@ -886,11 +977,13 @@ class TranslationManager {
 
     // 不再因 document.hidden 停止消费队列：翻译请求本身是 fetch，不依赖前台；
     // 渲染层已通过 scheduleRender 在后台标签页降级为同步写入，保证 CHUNK 不会丢失。
-    while (this.activeCount < this.concurrency && this.queue.length > 0) {
+    while (!document.hidden && this.activeCount < this.concurrency && this.queue.length > 0) {
       const nextTaskIdx = this.queue.findIndex(task => task.type !== 'card');
       if (nextTaskIdx === -1) break;
       const nextTask = this.queue.splice(nextTaskIdx, 1)[0];
       if (nextTask) {
+        const live = nextTask.type === 'batch' ? nextTask.items.some(item => item.ui?.isConnected) : nextTask.ui?.isConnected;
+        if (!live) continue;
         this.runTask(nextTask, false);
       }
     }
@@ -943,6 +1036,7 @@ class TranslationManager {
       }
       return;
     }
+    const heartbeat = setInterval(() => { try { port.postMessage({ action: 'PING' }); } catch {} }, 20000);
     let accumulatedText = '';
     let settled = false;
     let completionNotified = false;
@@ -950,11 +1044,10 @@ class TranslationManager {
 
     const renderAccumulated = () => {
       renderFrame = 0;
+      if (settled || task.generation !== this.generation) return;
       if (task.type === 'batch') {
-        const parts = accumulatedText.split(this.BATCH_DELIMITER);
-        task.items.forEach((item, index) => {
-          if (parts[index]?.trim()) this.setItemText(item, parts[index].trim());
-        });
+        // Batch output is committed only after DONE validates segment count and order.
+        return;
       } else if (task.ui?.isConnected) {
         this.setItemText(task, accumulatedText);
       }
@@ -972,6 +1065,8 @@ class TranslationManager {
     const finalize = (disconnectMessage = '') => {
       if (settled) return;
       settled = true;
+      clearInterval(heartbeat);
+      if (renderFrame) cancelAnimationFrame(renderFrame);
       if (!completionNotified && task.generation === this.generation) {
         const contextInvalidated = /extension context invalidated|context invalidated/i.test(disconnectMessage) || !hasLiveExtensionContext();
         if (!contextInvalidated || !recoverInvalidatedExtensionContext(disconnectMessage)) {
@@ -982,6 +1077,7 @@ class TranslationManager {
       }
       if (this.activePorts.delete(port)) releaseSlot();
       this.processQueue();
+      if (isTranslating && this.queue.length === 0) scheduleProgressiveScan(translationSessionId, 500);
     };
 
     const disconnectAndFinalize = (disconnectMessage = '') => {
@@ -995,7 +1091,7 @@ class TranslationManager {
       disconnectAndFinalize();
     };
 
-    this.activePorts.set(port, { task, cancel: cancelTask });
+    this.activePorts.set(port, { task, cancel: cancelTask, heartbeat });
 
     port.onDisconnect.addListener(() => {
       let disconnectMessage = '';
@@ -1022,6 +1118,7 @@ class TranslationManager {
           task.retryCount += 1;
           const delay = 1200 * (2 ** task.retryCount) + Math.random() * 800;
           settled = true;
+          clearInterval(heartbeat);
           if (this.activePorts.delete(port)) releaseSlot();
           port.disconnect();
           const timer = window.setTimeout(() => {
@@ -1047,7 +1144,9 @@ class TranslationManager {
       if (msg.action === 'DONE') {
         completionNotified = true;
         if (renderFrame) cancelAnimationFrame(renderFrame);
-        renderAccumulated();
+        if (task.type === 'batch' && Array.isArray(msg.segments)) {
+          task.items.forEach((item, index) => this.setItemText(item, msg.segments[index] || ''));
+        } else renderAccumulated();
         targets.forEach(item => {
           if (item.ui?.isConnected && !item.ui.textContent.trim()) this.setItemText(item, item.text || task.text);
           else if (item.ui?.isConnected) {
@@ -1063,7 +1162,8 @@ class TranslationManager {
     try {
       port.postMessage({
         action: 'TRANSLATE', text: task.text, targetLang: task.targetLang,
-        mode: task.mode, traceId: task.traceId
+        mode: task.mode, traceId: task.traceId, context: task.context || '',
+        segments: task.type === 'batch' ? task.items.map(item => item.text) : undefined
       });
     } catch (error) {
       disconnectAndFinalize(String(error?.message || '无法发送翻译请求'));
@@ -1076,18 +1176,18 @@ class TranslationManager {
     item.ui.setAttribute('aria-busy', 'false');
     if (!isCard) {
       item.originElements?.forEach(el => el.classList.remove('hidden'));
-      item.ui.textContent = '翻译失败';
+      item.ui.textContent = tr('翻译失败', 'Translation failed');
       item.ui.title = `翻译失败: ${message}`;
       item.ui.classList.add('ai-translation-error');
       return;
     }
     item.ui.replaceChildren();
     const title = document.createElement('strong');
-    title.textContent = '翻译失败';
+    title.textContent = tr('翻译失败', 'Translation failed');
     const detail = document.createElement('span');
     detail.textContent = message;
     const hint = document.createElement('small');
-    hint.textContent = '请检查 API 配置或稍后重试。';
+    hint.textContent = tr('请检查 API 配置或稍后重试。', 'Check the API settings or try again.');
     const wrapper = document.createElement('div');
     wrapper.className = 'ai-card-error';
     wrapper.append(title, detail, hint);
@@ -1110,6 +1210,7 @@ class TranslationManager {
     this.queue = [];
     this.retryTimers.forEach(timer => clearTimeout(timer));
     this.retryTimers.clear();
+    this.activePorts.forEach(entry => clearInterval(entry.heartbeat));
     const ports = [...this.activePorts.keys()];
     this.activePorts.clear();
     this.activeCount = 0;
@@ -1130,6 +1231,7 @@ async function togglePageTranslation() {
 }
 
 async function enablePageTranslation(source = 'manual') {
+  if (isTranslating && translationUrl === window.location.href) return;
   const sessionId = ++translationSessionId;
   isTranslating = true;
   translationSource = source;
@@ -1166,6 +1268,7 @@ function disablePageTranslation() {
   updateBubbleState(false);
 
   stopProgressiveTranslation();
+  clearTimeout(mutationDebounceTimer); mutationDebounceTimer = null; pendingMutationRoots.clear();
   pageManager.cancelAll();
 
   document.querySelectorAll('.ai-translate-block, .ai-trans-minimal, .ai-trans-minimal-block, .ai-trans-replacement').forEach(el => el.remove());
@@ -1184,6 +1287,20 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     togglePageTranslation();
   }
   
+  if (request.action === "UI_LANGUAGE_CHANGED") {
+    uiLang = request.uiLang === 'en' ? 'en' : 'zh';
+    document.querySelector('.ai-translator-bubble')?.setAttribute('aria-label', tr('翻译当前页面', 'Translate page'));
+    document.querySelector('.ai-selection-btn')?.setAttribute('aria-label', tr('翻译选中文字', 'Translate selection'));
+    const card = selectionManager?.card;
+    if (card) {
+      card.setAttribute('aria-label', tr('划词翻译结果', 'Translation result'));
+      card.querySelector('.ai-close-btn')?.setAttribute('aria-label', tr('关闭', 'Close'));
+      const copy = card.querySelector('.ai-copy-btn span:last-child'); if (copy) copy.textContent = tr('复制', 'Copy');
+      const explain = card.querySelector('.ai-explain-btn span:last-child'); if (explain) explain.textContent = tr('解读', 'Explain');
+    }
+  }
+  if (request.action === "TRANSLATION_SETTINGS_CHANGED" && isTranslating) { const source = translationSource; disablePageTranslation(); enablePageTranslation(source); }
+
   if (request.action === "UPDATE_SETTINGS") {
     const { showBubble } = request.payload;
     if (showBubble) createBubble(); else removeBubble();

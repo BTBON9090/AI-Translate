@@ -170,3 +170,32 @@ button:focus-visible, a:focus-visible { outline: 3px solid color-mix(in srgb, va
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Compact reading tool: legible controls, restrained movement and a stable results area. */
+html, body { min-width: 400px; }
+body { width: 400px; max-height: 600px; }
+.panel-tabs { grid-template-columns: repeat(4, 1fr); position: sticky; top: 0; z-index: 40; }
+.panel-tab { height: 34px; font-size: 12px; white-space: nowrap; }
+.panel-feedback:not(:empty) { padding: 8px 10px; margin-bottom: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow-wrap: anywhere; }
+textarea { width: 100%; resize: vertical; min-height: 108px; max-height: 220px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 14px; line-height: 1.6; }
+textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+textarea::placeholder { color: #68758a; }
+.text-meta { display: flex; align-items: center; justify-content: space-between; margin: -8px 0 12px; font-size: 11px; color: var(--text-muted); }
+.text-actions { display: flex; gap: 8px; margin: 8px 0; }
+.text-actions .save-btn { width: auto; flex: 1; margin: 0; }
+.secondary-btn { min-height: 37px; padding: 0 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--accent-strong); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.secondary-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+button:disabled { opacity: .55; cursor: default; }
+.text-result { margin-top: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.result-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
+#text-result { padding: 14px; font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 250px; overflow: auto; user-select: text; }
+.field-tips { overflow-wrap: anywhere; }
+.model-form .custom-options { background: transparent; border: 0; margin: 0; padding: 0; }
+#custom-api-url { padding-right: 46px; }
+#custom-model-name { padding-right: 110px; }
+.input-wrapper input { font-size: 12px; height: 38px; }
+.input-actions { top: 5px; }
+#detect-models { margin: 8px 0 12px; width: 100%; }
+#provider-endpoint { max-height: 65px; overflow-y: auto; }
+#cache-info { overflow-wrap: anywhere; }
+:root { --text-muted: #59677d; --text-faint: #647188; }
