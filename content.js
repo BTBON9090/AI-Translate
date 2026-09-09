@@ -16,6 +16,8 @@ let translationUrl = null;
 let translationSessionId = 0;
 let navigationEpoch = 0;
 let autoCheckTimers = [];
+let autoTranslatePausedUrl = null;
+let autoCheckEpoch = 0;
 let progressiveScrollTimer = null;
 let progressiveScrollHandler = null;
 const PROGRESSIVE_SCAN_DELAY_MS = 120;
@@ -127,6 +129,8 @@ function init() {
 
 function handleUrlChange() {
   navigationEpoch += 1;
+  autoTranslatePausedUrl = null;
+  autoCheckEpoch += 1;
   autoCheckTimers.forEach(timer => clearTimeout(timer));
   autoCheckTimers = [];
   if (isTranslating) disablePageTranslation();
@@ -145,10 +149,11 @@ function scheduleAutoTranslateCheck(delay) {
 }
 
 function checkAutoTranslate(expectedUrl = window.location.href, expectedEpoch = navigationEpoch) {
-  if (!hasLiveExtensionContext()) return;
+  if (!hasLiveExtensionContext() || autoTranslatePausedUrl === expectedUrl) return;
+  const expectedAutoEpoch = autoCheckEpoch;
   try {
     getLocalSettings().then((result) => {
-      if (!result) return;
+      if (!result || expectedAutoEpoch !== autoCheckEpoch || autoTranslatePausedUrl === expectedUrl) return;
       if (expectedEpoch !== navigationEpoch || expectedUrl !== window.location.href) return;
       const currentHost = window.location.hostname;
       const autoSites = result.autoSites || [];
@@ -259,12 +264,14 @@ function createBubble() {
   requestAnimationFrame(() => bubble.classList.add('visible'));
   setupDrag(bubble);
   bubble.addEventListener('click', (e) => {
-    if (bubble.dataset.isDragging === 'true') return;
+    e.stopPropagation();
+    if (!e.isTrusted || e.button !== 0 || bubble.dataset.isDragging === 'true') return;
     void togglePageTranslation();
   });
   bubble.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+    if (e.isTrusted && (e.key === 'Enter' || e.key === ' ') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && !e.repeat) {
       e.preventDefault();
+      e.stopPropagation();
       void togglePageTranslation();
     }
   });
@@ -306,6 +313,7 @@ function setupDrag(el) {
   }
   getLocalSettings().then(settings => { if (!el.isConnected || start) return; side = settings?.bubblePosition?.side || side; y = settings?.bubblePosition?.y ?? y; dock(); });
   el.addEventListener('pointerdown', event => {
+    event.stopPropagation();
     if (event.button !== 0) return;
     const rect = el.getBoundingClientRect();
     start = { x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
@@ -329,7 +337,7 @@ function setupDrag(el) {
     chrome.runtime.sendMessage({ action: 'SAVE_BUBBLE_POSITION', position: { side, y } }).catch(() => {});
   };
   el.addEventListener('pointerup', finish);
-  el.addEventListener('pointercancel', finish);
+  el.addEventListener('pointercancel', () => { el.dataset.isDragging = 'true'; finish(); });
   const resize = () => { if (el.isConnected) dock(); else window.removeEventListener('resize', resize); };
   window.addEventListener('resize', resize, { passive: true });
   el.cleanupDrag = () => window.removeEventListener('resize', resize);
@@ -351,14 +359,14 @@ class ModernSelectionManager {
   }
 
   handleMouseUp(event) {
+    const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+    if (target?.closest('.ai-card, .ai-selection-btn, .ai-translator-bubble, input, textarea, select, [contenteditable]')) return;
     // 用微任务延后读取，避免某些浏览器在 mouseup 同步阶段 selection 尚未更新；
     // 不再用 80ms 长延时，防止全屏翻译的 DOM mutation 在延时窗口内干扰 selection。
     window.setTimeout(() => {
       const selection = window.getSelection();
       let text = selection?.toString().replace(/\s+/g, ' ').trim() || '';
       if (selection?.rangeCount === 0 && !text) return;
-      const target = event.target instanceof Element ? event.target : event.target?.parentElement;
-      if (target?.closest('.ai-card, .ai-selection-btn, input, textarea, [contenteditable="true"]')) return;
 
       // 全屏翻译后划词失效修复：优先原文，选不到原文则用译文。
       // 当选中节点落在译文元素内时，向上找同级的 .ai-origin-text 取原文。
@@ -426,7 +434,9 @@ class ModernSelectionManager {
     const top = Math.min(window.innerHeight - 44, Math.max(8, selectionRect.bottom + 8));
     button.style.left = `${left}px`;
     button.style.top = `${top}px`;
-    button.addEventListener('mousedown', event => event.preventDefault());
+    button.addEventListener('pointerdown', event => event.stopPropagation());
+    button.addEventListener('mousedown', event => { event.preventDefault(); event.stopPropagation(); });
+    button.addEventListener('mouseup', event => event.stopPropagation());
     button.addEventListener('click', event => {
       event.stopPropagation();
       this.showCard(selectionRect);
@@ -466,6 +476,10 @@ class ModernSelectionManager {
 
     const card = document.createElement('section');
     card.className = 'ai-card';
+    // Keep card gestures out of the host page's delegated click handlers.
+    for (const type of ['pointerdown', 'mousedown', 'click', 'dblclick']) {
+      card.addEventListener(type, event => event.stopPropagation());
+    }
     card.setAttribute('role', 'dialog');
     card.setAttribute('aria-label', tr('划词翻译结果', 'Translation result'));
 
@@ -975,9 +989,8 @@ class TranslationManager {
       setBubbleLoading(false); return;
     }
 
-    // 不再因 document.hidden 停止消费队列：翻译请求本身是 fetch，不依赖前台；
-    // 渲染层已通过 scheduleRender 在后台标签页降级为同步写入，保证 CHUNK 不会丢失。
-    while (!document.hidden && this.activeCount < this.concurrency && this.queue.length > 0) {
+    // Only an active page-translation session may consume page tasks.
+    while (isTranslating && !document.hidden && this.activeCount < this.concurrency && this.queue.length > 0) {
       const nextTaskIdx = this.queue.findIndex(task => task.type !== 'card');
       if (nextTaskIdx === -1) break;
       const nextTask = this.queue.splice(nextTaskIdx, 1)[0];
@@ -1226,8 +1239,17 @@ const pageManager = new TranslationManager();
 
 async function togglePageTranslation() {
   if (recoverInvalidatedExtensionContext()) return;
-  if (isTranslating) disablePageTranslation();
-  else await enablePageTranslation('manual');
+  await setManualPageTranslation(!isTranslating);
+}
+
+async function setManualPageTranslation(enabled) {
+  // Invalidate both scheduled checks and settings reads already in flight.
+  autoCheckEpoch += 1;
+  autoCheckTimers.forEach(timer => clearTimeout(timer));
+  autoCheckTimers = [];
+  autoTranslatePausedUrl = enabled ? null : window.location.href;
+  if (enabled) await enablePageTranslation('manual');
+  else disablePageTranslation();
 }
 
 async function enablePageTranslation(source = 'manual') {
@@ -1283,6 +1305,10 @@ function disablePageTranslation() {
 }
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.action === "SET_PAGE_TRANSLATION" && typeof request.enabled === 'boolean' && _sender.url === chrome.runtime.getURL('popup/popup.html')) {
+    setManualPageTranslation(request.enabled).then(() => sendResponse({ isTranslating }));
+    return true;
+  }
   if (request.action === "START_TRANSLATION") {
     togglePageTranslation();
   }
@@ -1315,7 +1341,9 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   }
 
   if (request.action === "AUTO_TRANSLATE_SETTING_CHANGED") {
+    autoCheckEpoch += 1;
     if (request.enabled) {
+      autoTranslatePausedUrl = null;
       checkAutoTranslate();
     } else if (translationSource === 'auto') {
       // 关闭自动翻译时保留当前结果，下一次 URL 变化会严格停止。

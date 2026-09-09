@@ -71,22 +71,97 @@ const assert = require('node:assert/strict');
    await worker.evaluate(() => chrome.storage.local.set({ bilingualMode: true }));
    await worker.evaluate(id => chrome.tabs.sendMessage(id, { action: 'TRANSLATION_SETTINGS_CHANGED' }), pageId);
    await page.waitForFunction(() => document.querySelector('#third .ai-trans-minimal')?.textContent.includes('when returning'));
+   // A manual restore must survive the second delayed SPA auto-translate check.
+   await page.evaluate(() => history.pushState({}, '', '/manual-pause'));
+   await page.waitForTimeout(500);
+   await page.waitForFunction(() => document.querySelector('#third .ai-trans-minimal')?.textContent.includes('when returning'));
+   await page.locator('.ai-translator-bubble').click();
+   await page.waitForFunction(() => !document.querySelector('.ai-translator-bubble.active'));
+   await page.waitForTimeout(1700);
+   assert.equal(await page.locator('[data-ai-translated]').count(), 0, 'manual restore must not be undone by delayed automatic translation');
    // Drag to left edge and ensure it survives reload.
    const bubble = page.locator('.ai-translator-bubble'); await bubble.hover(); const rect = await bubble.boundingBox();
    await page.mouse.move(rect.x + 10, rect.y + 10); await page.mouse.down(); await page.mouse.move(12, 250, { steps: 10 }); await page.mouse.up();
    await page.waitForFunction(() => document.querySelector('.ai-translator-bubble')?.dataset.edge === 'left');
+   assert.equal(await page.locator('[data-ai-translated]').count(), 0, 'drag must not start page translation');
+   await worker.evaluate(id => chrome.tabs.sendMessage(id, { action: 'CHECK_AUTO_TRANSLATE' }), pageId);
+   await page.evaluate(() => document.querySelector('.ai-translator-bubble').click());
+   await page.waitForTimeout(100);
+   assert.equal(await page.locator('[data-ai-translated]').count(), 0, 'background recheck and host synthetic clicks cannot undo manual restore');
+   await page.locator('.ai-translator-bubble').focus();
+   await page.keyboard.press('Control+Enter');
+   await page.keyboard.press('Meta+Enter');
+   assert.equal((await worker.evaluate(id => chrome.tabs.sendMessage(id, { action: 'GET_STATE' }), pageId)).isTranslating, false, 'text shortcuts must not activate a focused page bubble');
+   // Track delegated host-page handlers: selection gestures belong to the extension.
+   await page.evaluate(() => {
+     window.leakedSelectionEvents = [];
+     for (const type of ['pointerdown', 'mousedown', 'click']) document.addEventListener(type, event => {
+       if (event.target.closest?.('.ai-selection-btn,.ai-card')) window.leakedSelectionEvents.push(type);
+     });
+   });
    // Select text by range then deliver native mouseup through dispatch.
    await page.evaluate(() => { const node = document.querySelector('#third').firstChild; const range = document.createRange(); range.setStart(node, 0); range.setEnd(node, 20); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); node.parentElement.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); });
+   // Deliberately overlap the selection button and page bubble to test hit targeting.
+   await page.evaluate(() => {
+     const bubble = document.querySelector('.ai-translator-bubble').getBoundingClientRect();
+     const button = document.querySelector('.ai-selection-btn');
+     button.style.left = `${bubble.left}px`; button.style.top = `${bubble.top}px`;
+   });
    await page.locator('.ai-selection-btn').click(); await page.waitForFunction(() => document.querySelector('.ai-card-translation')?.textContent.startsWith('译文'));
    await page.locator('.ai-explain-btn').click(); await page.waitForFunction(() => document.querySelector('.ai-explain-btn')?.textContent.includes('已解读'));
    const explainedCount = requests.length; await page.locator('.ai-explain-btn').click(); await page.locator('.ai-explain-btn').click(); assert.equal(requests.length, explainedCount);
+   assert.equal(await page.locator('[data-ai-translated]').count(), 0, 'selection and explanation must not activate page translation');
+   assert.deepEqual(await page.evaluate(() => window.leakedSelectionEvents), [], 'selection/card gestures must not leak into host click handlers');
    await page.screenshot({ path: path.join(artifactDir, 'selection.png') });
    await page.keyboard.press('Escape'); assert.equal(await page.locator('.ai-card').count(), 0);
    const popup = await context.newPage(); await popup.setViewportSize({ width: 400, height: 600 }); await popup.goto(`chrome-extension://${id}/popup/popup.html`);
+   assert.equal((await popup.locator('#text-input').boundingBox()).height, 76, 'default input height stays compact');
+   const beforeText = requests.length;
+   await popup.locator('#text-target').selectOption('ja');
+   await popup.locator('#text-target').press('ArrowDown'); await popup.locator('#text-target').press('Enter');
+   await popup.locator('#text-target').selectOption('ja');
+   assert.equal((await worker.evaluate(id => chrome.tabs.sendMessage(id, { action: 'GET_STATE' }), pageId)).isTranslating, false);
+   assert.equal(requests.length, beforeText, 'selecting a text language must not request translations');
    await popup.locator('#text-input').fill('bank'); await popup.locator('#translate-text').click(); await popup.waitForFunction(() => document.querySelector('#text-status').textContent.startsWith('已完成'));
+   assert.match(requests.at(-1).body.messages[0].content, /Write in Japanese/);
    await popup.screenshot({ path: path.join(artifactDir, 'text-zh.png') });
+   await popup.locator('#explain-text').click(); await popup.waitForFunction(() => document.querySelector('#text-status').textContent.startsWith('已完成'));
+   assert.match(requests.at(-1).body.messages[0].content, /Write in Simplified Chinese/, 'explanation follows Chinese UI, not Japanese target');
    await popup.locator('#lang-toggle').click(); assert.equal(await popup.locator('html').getAttribute('lang'), 'en'); assert.equal(await popup.locator('#translate-text').textContent(), 'Translate');
+   await popup.locator('#explain-text').click(); await popup.waitForFunction(() => document.querySelector('#text-status').textContent.startsWith('Done'));
+   assert.match(requests.at(-1).body.messages[0].content, /Write in English/, 'explanation follows English UI');
+   for (const shortcut of ['Control+Enter', 'Meta+Enter']) {
+     await popup.locator('#text-input').fill(`Translate with ${shortcut}`);
+     const beforeShortcut = requests.length;
+     await popup.locator('#text-input').press(shortcut);
+     await popup.waitForFunction(() => document.querySelector('#text-status').textContent.startsWith('Done'));
+     assert.equal(requests.length, beforeShortcut + 1, 'shortcut sends exactly one text request');
+     assert.match(requests.at(-1).body.messages[0].content, /Write in Japanese/);
+   }
+   await popup.locator('#text-input').fill('Keep composing');
+   const beforeComposition = requests.length;
+   await popup.locator('#text-input').dispatchEvent('keydown', { key: 'Enter', ctrlKey: true, isComposing: true });
+   await popup.locator('#text-input').dispatchEvent('keydown', { key: 'Enter', metaKey: true, repeat: true });
+   await popup.waitForTimeout(100);
+   assert.equal(requests.length, beforeComposition, 'IME confirmation and held shortcut must not submit');
+   assert.equal((await worker.evaluate(id => chrome.tabs.sendMessage(id, { action: 'GET_STATE' }), pageId)).isTranslating, false, 'text operations and locale changes keep page translation paused');
+   assert.equal((await worker.evaluate(() => chrome.storage.local.get('targetLang'))).targetLang, 'zh', 'text language must not change page preference');
    await popup.screenshot({ path: path.join(artifactDir, 'text-en.png') });
+   // Reopen the popup with the article active, just as a toolbar popup would.
+   await worker.evaluate(id => chrome.tabs.update(id, { active: true }), pageId);
+   await popup.reload();
+   await popup.waitForFunction(() => document.querySelector('#current-host').textContent === '127.0.0.1');
+   await popup.evaluate(() => document.querySelector('#main-action-btn').click());
+   assert.equal((await worker.evaluate(id => chrome.tabs.sendMessage(id, { action: 'GET_STATE' }), pageId)).isTranslating, false, 'hidden Page controls cannot start translation');
+   await popup.locator('[data-panel-target="translate"]').click();
+   await popup.locator('#main-action-btn').click();
+   await popup.waitForFunction(() => document.querySelector('#main-action-btn').classList.contains('restoring'));
+   assert.equal((await worker.evaluate(id => chrome.tabs.sendMessage(id, { action: 'GET_STATE' }), pageId)).isTranslating, true);
+   const repeated = await popup.evaluate(id => chrome.tabs.sendMessage(id, { action: 'SET_PAGE_TRANSLATION', enabled: true }), pageId);
+   assert.equal(repeated.isTranslating, true, 'repeated explicit start is idempotent');
+   await popup.locator('#main-action-btn').click();
+   await popup.waitForFunction(() => !document.querySelector('#main-action-btn').classList.contains('restoring'));
+   assert.equal((await popup.evaluate(id => chrome.tabs.sendMessage(id, { action: 'SET_PAGE_TRANSLATION', enabled: false }), pageId)).isTranslating, false);
    await popup.locator('[data-panel-target="model"]').click();
    await popup.locator('#detect-models').click(); await popup.waitForFunction(() => document.querySelector('#tips-model-name').textContent.includes('Models returned by API'));
    assert.equal(await popup.locator('#model-dropdown [role="option"]').count(), 2);
@@ -103,6 +178,6 @@ const assert = require('node:assert/strict');
    const reopened = await context.newPage(); const beforeRestart = requests.length; await reopened.goto(base + '/article'); await reopened.waitForFunction(() => document.querySelector('#third .ai-trans-minimal')?.textContent.includes('译文'));
    assert.equal(requests.length, beforeRestart, 'browser restart must use persistent cache'); assert.equal(await reopened.locator('.ai-translator-bubble').getAttribute('data-edge'), 'left');
    assert.deepEqual(errors, []);
-   console.log('Browser regression passed: auto/reload/SPA/dynamic DOM/selection/docking/i18n/discovery/all protocols/browser restart.');
+   console.log('Browser regression passed: auto/reload/SPA/dynamic DOM/selection isolation/manual pause/shortcuts/explanation language/compact input/page controls/docking/i18n/discovery/all protocols/browser restart.');
  } finally { await context?.close(); server.close(); await fs.rm(profile, { recursive: true, force: true }); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -173,11 +173,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('lang-toggle').addEventListener('click', async () => { lang = lang === 'en' ? 'zh' : 'en'; await chrome.storage.local.set({ uiLang: lang }); renderLocale(); await broadcast({ action: 'UI_LANGUAGE_CHANGED', uiLang: lang }); });
   function renderPageButton() { document.querySelector('#main-action-btn .btn-text').textContent = t(translatingPage ? '显示原文' : '翻译当前页面'); $('main-action-btn').classList.toggle('restoring', translatingPage); $('btn-model-display').textContent = `${t('模型')}: ${settings.modelName || providers[settings.provider || provider]?.model || '—'}`; }
   $('main-action-btn').addEventListener('click', async () => {
+    if ($('main-action-btn').closest('[data-panel]').classList.contains('hidden') || $('main-action-btn').disabled) return;
+    $('main-action-btn').disabled = true;
     try {
       if (!tab?.id || !/^https?:/.test(tab.url || '')) throw new Error(t('此页面无法翻译，请打开普通网页。'));
-      await chrome.tabs.sendMessage(tab.id, { action: 'START_TRANSLATION' });
-      const state = await chrome.tabs.sendMessage(tab.id, { action: 'GET_STATE' }); translatingPage = !!state?.isTranslating; renderPageButton(); feedback();
+      const state = await chrome.tabs.sendMessage(tab.id, { action: 'SET_PAGE_TRANSLATION', enabled: !translatingPage });
+      if (typeof state?.isTranslating !== 'boolean') throw new Error('Refresh content script');
+      translatingPage = state.isTranslating; renderPageButton(); feedback();
     } catch { feedback(t('请刷新网页后重试；浏览器内部页面不支持翻译。')); }
+    finally { $('main-action-btn').disabled = false; }
   });
   $('target-lang').value = settings.targetLang || 'zh'; $('text-target').value = settings.textTargetLang || settings.targetLang || 'zh';
   $('bilingual-mode').checked = settings.bilingualMode !== false; $('trans-style').value = settings.transStyle || 'minimal'; $('show-bubble').checked = settings.showBubble !== false;
@@ -218,10 +222,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (msg.error) finish(`${t('翻译失败')} · ${msg.error}`);
     });
     port.onDisconnect.addListener(() => { clearInterval(textHeartbeat); if (frame) cancelAnimationFrame(frame); if (textPort === port) { textPort = null; busyText(false); $('text-status').textContent = t('连接中断，请重试。'); void checkWorker(); } });
-    port.postMessage({ action: 'TRANSLATE', text, targetLang: $('text-target').value, mode });
+    port.postMessage({ action: 'TRANSLATE', text, targetLang: mode === 'explain' ? lang : $('text-target').value, mode });
   }
   $('translate-text').addEventListener('click', () => translateText('dictionary')); $('explain-text').addEventListener('click', () => translateText('explain'));
-  $('text-input').addEventListener('keydown', event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); translateText('dictionary'); } });
+  $('text-input').addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault(); event.stopPropagation();
+    if (!event.repeat) translateText('dictionary');
+  });
   $('copy-text').addEventListener('click', async () => { try { await navigator.clipboard.writeText(result); $('text-status').textContent = t('已复制'); } catch { $('text-status').textContent = t('复制失败，请手动选择文字。'); } });
   window.addEventListener('pagehide', () => { stopText(); detectionController?.abort(); probeController?.abort(); });
   async function refreshCache() { try { const info = await chrome.runtime.sendMessage({ action: 'CACHE_INFO' }); $('cache-info').textContent = `${info.count} ${t('条段落')} · ${(info.bytes / 1024 / 1024).toFixed(2)} MB${info.writeFailed ? ` · ${t('本地写入失败')}` : ''}`; } catch {} }
