@@ -2,9 +2,21 @@
   "use strict";
 
   const catalog = {
-    version: 20260909,
+    version: 20260910,
     defaultProvider: "deepseek",
     providers: {
+      qwen_token_plan: {
+        labelZh: "阿里云百炼 · Token Plan 套餐", labelEn: "Alibaba · Token Plan subscription",
+        baseUrl: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+        modelsUrl: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/models",
+        protocol: "openai", model: "qwen3.8-flash",
+        commonModels: ["qwen3.8-flash", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-flash-0731", "glm-5.2"],
+        requestOptions: { enable_thinking: false },
+        docsUrl: "https://help.aliyun.com/zh/model-studio/token-plan-personal-overview",
+        endpointNoteZh: "控制台“套餐专属 Base URL”对应此项，使用套餐专属 Key，不能混用按量付费 Key。模型与使用范围以套餐文档为准。",
+        endpointNoteEn: "Matches the subscription Base URL in the console. Use the plan-specific key, not a pay-as-you-go key. Model access and usage scope depend on the plan."
+      },
       openai: {
         labelZh: "OpenAI 官方", labelEn: "OpenAI Official",
         baseUrl: "https://api.openai.com/v1", url: "https://api.openai.com/v1/chat/completions",
@@ -20,7 +32,7 @@
         requestOptions: {}, docsUrl: "https://platform.claude.com/docs/en/api/models-list"
       },
       qwen_international: {
-        labelZh: "阿里云百炼 · 新加坡公共接口", labelEn: "Alibaba · Singapore public endpoint",
+        labelZh: "阿里云百炼 · 按量付费（新加坡）", labelEn: "Alibaba · Pay-as-you-go (Singapore)",
         baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
         url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
         modelsUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models",
@@ -74,8 +86,8 @@
         docsUrl: "https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions"
       },
       qwen: {
-        labelZh: "阿里云百炼 · 北京公共接口",
-        labelEn: "Alibaba Model Studio (Public)",
+        labelZh: "阿里云百炼 · 按量付费（北京）",
+        labelEn: "Alibaba · Pay-as-you-go (Beijing)",
         baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         modelsUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1/models",

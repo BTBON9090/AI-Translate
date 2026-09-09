@@ -98,3 +98,35 @@ test('known official Anthropic endpoints use provider-specific prefixes', () => 
  assert.equal(p.endpoint('https://dashscope-intl.aliyuncs.com/apps/anthropic', 'openai'), 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions');
  assert.equal(p.endpoint('https://api.deepseek.com/chat/completions', 'anthropic'), 'https://api.deepseek.com/anthropic/v1/messages');
 });
+test('Token Plan subscription URL and protocol-specific discovery stay on the same origin', async () => {
+ const c = worker({}, async () => new Response('{}', { status: 404 }));
+ const config = c.AITranslateConnection.resolve({ provider: 'qwen_token_plan', apiKey: 'fake-key', protocol: 'anthropic' });
+ assert.equal(config.apiUrl, 'https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic/v1/messages');
+ const result = await c.AITranslateConnection.discover({ provider: 'qwen_token_plan', apiKey: 'fake-key', protocol: 'anthropic' });
+ assert.equal(result.source, 'catalog'); assert(result.models.includes('qwen3.8-flash')); assert.equal(result.status, 404);
+});
+test('401/403 and HTTP 500 never become unverified catalog success', async () => {
+ for (const status of [401, 403, 429, 500]) {
+   const c = worker({}, async () => new Response('{}', { status }));
+   await assert.rejects(c.AITranslateConnection.discover({ provider: 'qwen_token_plan', apiKey: 'fake-key' }), e => e.status === status);
+ }
+});
+test('a custom URL does not inherit an unrelated provider model catalog', async () => {
+ const c = worker({}, async () => new Response('{}', { status: 404 }));
+ await assert.rejects(c.AITranslateConnection.discover({ provider: 'qwen_token_plan', apiKey: 'fake-key', apiUrl: 'https://other.example/v1' }), e => e.code === 'UNSUPPORTED');
+});
+test('model listing supports common arrays and preserves truthful source', async () => {
+ for (const data of [[{ id: 'one' }], { models: ['one'] }, { data: [{ name: 'one' }] }]) {
+   const c = worker({}, async () => Response.json(data));
+   const result = await c.AITranslateConnection.discover({ provider: 'custom', apiUrl: 'https://other.example/v1' });
+   assert.deepEqual([...result.models], ['one']); assert.equal(result.source, 'api');
+ }
+});
+test('model probe uses each protocol and an explicit small output cap', async () => {
+ for (const protocol of ['openai', 'anthropic', 'responses']) {
+   let sent;
+   const c = worker({}, async (_url, options) => { sent = JSON.parse(options.body); return Response.json(protocol === 'openai' ? { choices: [{}] } : protocol === 'anthropic' ? { content: [] } : { output: [] }); });
+   await c.AITranslateConnection.probe({ provider: 'custom', protocol, apiUrl: 'https://other.example/v1', modelName: 'test' });
+   assert.equal(sent.stream, false); assert.equal(protocol === 'responses' ? sent.max_output_tokens : sent.max_tokens, 32);
+ }
+});

@@ -199,3 +199,8 @@ button:disabled { opacity: .55; cursor: default; }
 #provider-endpoint { max-height: 65px; overflow-y: auto; }
 #cache-info { overflow-wrap: anywhere; }
 :root { --text-muted: #59677d; --text-faint: #647188; }
+
+#worker-warning { color: #815500; background: #fff8e5; padding: 10px; border-radius: 8px; }
+#worker-warning-text { display: block; margin-bottom: 8px; }
+#reload-extension, #probe-model { width: 100%; height: auto; min-height: 37px; padding: 8px; white-space: normal; }
+#probe-status:not(:empty) { margin: 7px 0; }

@@ -1,6 +1,14 @@
 (function (global) {
   'use strict';
   const en = {
+    '保存设置并重新加载插件': 'Save settings and reload extension',
+    '测试此模型连接（少量用量）': 'Test model connection (uses tokens)',
+    '正在测试模型连接…': 'Testing model connection…',
+    '模型接口已接受测试请求；可保存使用。': 'The model API accepted the test request. Ready to save.',
+    '插件后台未就绪或版本不一致。模型列表仍可检测；翻译前请重新加载插件。': 'The extension background is unavailable or outdated. Model discovery still works; reload before translating.',
+    '官方文档参考模型，未验证当前 Key 或模型权限': 'Models from official docs; your key and access are unverified',
+    '接口未提供可读取的模型列表；已显示官方参考模型，尚未验证 Key。可选择模型后测试连接。': 'The API did not provide a readable model list. Showing official reference IDs without validating your key. Select a model to test the connection.',
+
     'AI 极简翻译': 'AI Translate', 'AI 极简翻译 v': 'AI Translate v', '读懂网页，不打断阅读': 'Read naturally, stay in the flow',
     '就绪': 'Ready', '切换界面语言': 'Switch interface language', '插件面板': 'Extension panels',
     '输入翻译': 'Text', '网页': 'Page', '模型': 'Models', '关于': 'About',

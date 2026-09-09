@@ -29,6 +29,7 @@
       <button class="panel-tab" type="button" data-panel-target="about" aria-selected="false">关于</button>
     </nav>
 
+    <div id="worker-warning" class="panel-feedback hidden" role="status"><span id="worker-warning-text"></span><button id="reload-extension" class="secondary-btn" type="button">保存设置并重新加载插件</button></div>
     <p id="panel-feedback" class="panel-feedback" role="status" aria-live="polite"></p>
     <main>
       <section class="panel-view" data-panel="text">
@@ -154,6 +155,8 @@
           </div>
 
           <div class="api-key-area">
+            <button id="probe-model" class="secondary-btn full-width-select" type="button">测试此模型连接（少量用量）</button>
+            <p id="probe-status" class="field-tips" role="status"></p>
             <button id="save-key-btn" class="save-btn" type="button">保存并使用</button>
           </div>
         </div>
@@ -186,6 +189,7 @@
   </div>
   <script src="../providers.js"></script>
   <script src="../protocol.js"></script>
+  <script src="../connection.js"></script>
   <script src="i18n.js"></script>
   <script src="popup.js"></script>
 </body>

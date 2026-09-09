@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let provider = providers[settings.provider] ? settings.provider : AI_TRANSLATE_PROVIDER_CATALOG.defaultProvider;
   let profiles = { ...settings.providerProfiles };
   if (!profiles[provider]) profiles[provider] = { apiKey: settings.apiKey || '', apiUrl: settings.apiUrl || providers[provider].url, modelName: settings.modelName || providers[provider].model, protocol: settings.protocol || providers[provider].protocol || 'openai' };
+  let detectionController = null, probeController = null, workerUnavailable = false;
   let models = [], listSource = 'recommended', modelIndex = -1, detectEpoch = 0;
   let tab = null, domain = '', translatingPage = false, textPort = null, result = '', textMode = 'dictionary';
   let textHeartbeat = null;
@@ -39,7 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('provider-docs').classList.toggle('hidden', !config.docsUrl);
   }
   function modelTips() {
-    $('tips-model-name').textContent = listSource === 'api' ? `${t('接口已返回模型')} · ${models.length} · ${t('可搜索或手动输入 ID')}` : listSource === 'builtin' ? t('内置免费代理，无需 API Key') : t('推荐模型（未经检测），也可手动输入 ID');
+    $('tips-model-name').textContent = listSource === 'api' ? `${t('接口已返回模型')} · ${models.length} · ${t('可搜索或手动输入 ID')}` : listSource === 'builtin' ? t('内置免费代理，无需 API Key') : listSource === 'catalog' ? t('官方文档参考模型，未验证当前 Key 或模型权限') : t('推荐模型（未经检测），也可手动输入 ID');
   }
   function renderLocale() {
     document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN'; document.title = t('AI 极简翻译');
@@ -47,7 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     for (const id of ['target-lang', 'text-target']) [...$(id).options].forEach(option => { option.textContent = option.value === 'zh' ? (lang === 'en' ? 'Simplified Chinese' : '简体中文') : option.value === 'zh-TW' ? (lang === 'en' ? 'Traditional Chinese' : '繁體中文') : names.of(option.value); });
     AITranslateI18n.apply(document.body, lang);
     $('app-title').textContent = t('AI 极简翻译'); $('lang-toggle').textContent = lang === 'en' ? '中文' : 'EN';
-    renderProviderLabels(); modelTips(); renderPageButton(); renderUpdate();
+    renderProviderLabels(); modelTips(); renderPageButton(); renderUpdate(); renderWorkerWarning();
     $('toggle-visibility').textContent = t($('api-key').type === 'password' ? '显示' : '隐藏');
     $('result-heading').textContent = t(textMode === 'explain' ? '精细解释' : '翻译结果');
     if (textPort) $('text-status').textContent = t('正在翻译…');
@@ -55,12 +56,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('panel-feedback').textContent = AITranslateI18n.translateMessage($('panel-feedback').textContent, lang);
   }
   function draft() { return { apiKey: $('api-key').value.trim(), apiUrl: $('custom-api-url').value.trim(), modelName: $('custom-model-name').value.trim(), protocol: $('api-protocol').value }; }
-  function invalidateDetection() { detectEpoch++; $('detect-models').disabled = false; $('refresh-models-btn').disabled = false; $('detect-models').textContent = t('检测并获取模型'); models = providers[provider].commonModels || []; listSource = 'recommended'; closeModels(); modelTips(); }
+  function invalidateDetection() { detectionController?.abort(); probeController?.abort(); $('probe-model').disabled = false; $('probe-status').textContent = ''; detectEpoch++; $('detect-models').disabled = false; $('refresh-models-btn').disabled = false; $('detect-models').textContent = t('检测并获取模型'); models = providers[provider].commonModels || []; listSource = 'recommended'; closeModels(); modelTips(); }
   function loadProvider() {
     invalidateDetection(); renderProviderLabels();
     const config = providers[provider], profile = profiles[provider] || {};
     $('api-key').value = profile.apiKey || ''; $('api-key').type = 'password';
-    $('custom-api-url').value = profile.apiUrl ?? config.url ?? ''; $('custom-api-url').placeholder = config.urlPlaceholder || config.baseUrl || 'https://api.example.com/v1';
+    $('custom-api-url').value = profile.apiUrl ?? config.baseUrl ?? config.url ?? ''; $('custom-api-url').placeholder = config.urlPlaceholder || config.baseUrl || 'https://api.example.com/v1';
     $('api-protocol').value = profile.protocol || config.protocol || 'openai';
     $('custom-model-name').value = profile.modelName ?? config.model ?? '';
     $('custom-model-name').placeholder = 'model-id';
@@ -71,6 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('model-dropdown-btn').disabled = !!config.isBuiltin;
     $('refresh-models-btn').classList.toggle('hidden', !!config.isBuiltin);
     $('save-key-btn').disabled = false;
+    $('probe-model').classList.toggle('hidden', !!config.isBuiltin);
     models = config.commonModels || []; listSource = config.isBuiltin ? 'builtin' : 'recommended';
     modelTips(); updateClearButtons();
   }
@@ -78,7 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   for (const id of ['api-key', 'custom-api-url', 'api-protocol']) $(id).addEventListener(id === 'api-protocol' ? 'change' : 'input', () => { invalidateDetection(); feedback(); });
   $('api-protocol').addEventListener('change', () => { try { $('custom-api-url').value = AITranslateProtocol.endpoint($('custom-api-url').value, $('api-protocol').value); } catch {} });
   function closeModels() { $('model-dropdown').classList.add('hidden'); $('custom-model-name').setAttribute('aria-expanded', 'false'); $('custom-model-name').removeAttribute('aria-activedescendant'); modelIndex = -1; }
-  function selectModel(id) { $('custom-model-name').value = id; closeModels(); updateClearButtons(); $('custom-model-name').focus(); }
+  function selectModel(id) { probeController?.abort(); $('probe-model').disabled = false; $('probe-status').textContent = ''; $('custom-model-name').value = id; closeModels(); updateClearButtons(); $('custom-model-name').focus(); }
   function renderModels(filter = '') {
     const filtered = models.filter(id => id.toLowerCase().includes(filter.toLowerCase())).slice(0, 200);
     const dropdown = $('model-dropdown'); dropdown.replaceChildren();
@@ -90,7 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     dropdown.classList.remove('hidden'); $('custom-model-name').setAttribute('aria-expanded', 'true');
   }
   $('model-dropdown-btn').addEventListener('click', () => { if ($('model-dropdown').classList.contains('hidden')) { modelIndex = -1; renderModels(); } else closeModels(); });
-  $('custom-model-name').addEventListener('input', () => { modelIndex = -1; renderModels($('custom-model-name').value); });
+  $('custom-model-name').addEventListener('input', () => { probeController?.abort(); $('probe-model').disabled = false; $('probe-status').textContent = ''; modelIndex = -1; renderModels($('custom-model-name').value); });
   $('custom-model-name').addEventListener('keydown', event => {
     if (event.key === 'Escape') return closeModels();
     if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
@@ -103,25 +105,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.addEventListener('click', event => { if (!event.target.closest('.model-select-wrapper')) closeModels(); });
   async function detect() {
+    detectionController?.abort(); detectionController = new AbortController();
     const epoch = ++detectEpoch;
     $('detect-models').disabled = true; $('refresh-models-btn').disabled = true; $('detect-models').textContent = t('正在检测…'); feedback();
     try {
       const config = draft();
-      config.apiUrl = AITranslateProtocol.endpoint(config.apiUrl, config.protocol);
-      if (!config.apiKey && provider !== 'custom') throw new Error(t('请填写 API Key。'));
-      const response = await chrome.runtime.sendMessage({ action: 'DISCOVER_MODELS', settings: { ...config, provider } });
+      config.apiUrl = AITranslateConnection.resolve({ ...config, provider }).apiUrl;
+      const response = await AITranslateConnection.discover({ ...config, provider }, { signal: detectionController.signal });
       if (epoch !== detectEpoch) return;
       if (response?.error) throw new Error(response.error);
       models = response.models || []; listSource = response.source; modelTips();
       $('custom-api-url').value = config.apiUrl;
       modelIndex = -1; renderModels();
-      feedback(t('已获取模型列表；请选择模型后保存。列表可见不代表该模型支持当前协议。'), true);
-    } catch (error) { if (epoch === detectEpoch) { models = providers[provider].commonModels || []; listSource = 'recommended'; modelTips(); feedback(`${t('检测失败')} · ${error.message}`); } }
+      feedback(t(response.source === 'catalog' ? '接口未提供可读取的模型列表；已显示官方参考模型，尚未验证 Key。可选择模型后测试连接。' : '已获取模型列表；请选择模型后保存。列表可见不代表该模型支持当前协议。'), response.source === 'api');
+    } catch (error) { if (epoch === detectEpoch) { models = providers[provider].commonModels || []; listSource = 'recommended'; modelTips(); feedback(`${t('检测失败')} · ${AITranslateConnection.describe(error, lang)}`); } }
     finally { if (epoch === detectEpoch) { $('detect-models').disabled = false; $('refresh-models-btn').disabled = false; $('detect-models').textContent = t('检测并获取模型'); } }
   }
   $('detect-models').addEventListener('click', detect); $('refresh-models-btn').addEventListener('click', detect);
-  $('save-key-btn').addEventListener('click', async () => {
-    try {
+  async function saveProfile() {
       const config = providers[provider], profile = draft();
       if (config.isBuiltin) Object.assign(profile, { apiKey: '', apiUrl: config.url, modelName: config.model, protocol: 'openai' });
       else { profile.apiUrl = AITranslateProtocol.endpoint(profile.apiUrl, profile.protocol); if (!profile.apiKey && provider !== 'custom') throw new Error(t('请填写 API Key。')); }
@@ -131,8 +132,39 @@ document.addEventListener('DOMContentLoaded', async () => {
       const savedProfiles = { ...saved.providerProfiles, [provider]: profile };
       await chrome.storage.local.set({ ...profile, provider, providerProfiles: savedProfiles, providerConfigVersion: AI_TRANSLATE_PROVIDER_CATALOG.version });
       profiles[provider] = profile; settings = { ...settings, ...profile, provider }; $('custom-api-url').value = profile.apiUrl;
-      feedback(t('模型配置已保存。'), true); renderPageButton();
-    } catch (error) { feedback(error.message); }
+  }
+  $('save-key-btn').addEventListener('click', async () => {
+    try { await saveProfile(); feedback(t('模型配置已保存。'), true); renderPageButton(); }
+    catch (error) { feedback(error.message); }
+  });
+  function renderWorkerWarning() {
+    $('worker-warning').classList.toggle('hidden', !workerUnavailable);
+    $('worker-warning-text').textContent = t('插件后台未就绪或版本不一致。模型列表仍可检测；翻译前请重新加载插件。');
+  }
+  async function checkWorker() {
+    let timer;
+    try {
+      const response = await Promise.race([
+        chrome.runtime.sendMessage({ action: 'BACKGROUND_STATUS' }),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('worker timeout')), 5000); })
+      ]);
+      workerUnavailable = !response || response.version !== version || response.connectionVersion !== 1;
+    } catch { workerUnavailable = true; }
+    finally { clearTimeout(timer); renderWorkerWarning(); }
+  }
+  $('reload-extension').addEventListener('click', async () => {
+    try { await saveProfile(); chrome.runtime.reload(); }
+    catch (error) { feedback(error.message); }
+  });
+  $('probe-model').addEventListener('click', async () => {
+    probeController?.abort(); const controller = new AbortController(); probeController = controller;
+    $('probe-model').disabled = true; $('probe-status').textContent = t('正在测试模型连接…');
+    try {
+      await AITranslateConnection.probe({ ...draft(), provider }, { signal: controller.signal });
+      if (!controller.signal.aborted) $('probe-status').textContent = t('模型接口已接受测试请求；可保存使用。');
+    } catch (error) {
+      if (!controller.signal.aborted) $('probe-status').textContent = AITranslateConnection.describe(error, lang);
+    } finally { if (probeController === controller) $('probe-model').disabled = false; }
   });
   $('toggle-visibility').addEventListener('click', () => { const visible = $('api-key').type === 'password'; $('api-key').type = visible ? 'text' : 'password'; $('toggle-visibility').textContent = t(visible ? '隐藏' : '显示'); $('toggle-visibility').setAttribute('aria-pressed', String(visible)); });
   function updateClearButtons() { document.querySelectorAll('.clear-btn').forEach(button => { button.classList.toggle('visible', !!$(button.dataset.target)?.value); button.setAttribute('aria-label', t('清除')); }); }
@@ -185,13 +217,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (msg.action === 'DONE') finish(t(msg.cached ? '已完成 · 复用已有结果' : '已完成'));
       if (msg.error) finish(`${t('翻译失败')} · ${msg.error}`);
     });
-    port.onDisconnect.addListener(() => { clearInterval(textHeartbeat); if (frame) cancelAnimationFrame(frame); if (textPort === port) { textPort = null; busyText(false); $('text-status').textContent = t('连接中断，请重试。'); } });
+    port.onDisconnect.addListener(() => { clearInterval(textHeartbeat); if (frame) cancelAnimationFrame(frame); if (textPort === port) { textPort = null; busyText(false); $('text-status').textContent = t('连接中断，请重试。'); void checkWorker(); } });
     port.postMessage({ action: 'TRANSLATE', text, targetLang: $('text-target').value, mode });
   }
   $('translate-text').addEventListener('click', () => translateText('dictionary')); $('explain-text').addEventListener('click', () => translateText('explain'));
   $('text-input').addEventListener('keydown', event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); translateText('dictionary'); } });
   $('copy-text').addEventListener('click', async () => { try { await navigator.clipboard.writeText(result); $('text-status').textContent = t('已复制'); } catch { $('text-status').textContent = t('复制失败，请手动选择文字。'); } });
-  window.addEventListener('pagehide', stopText);
+  window.addEventListener('pagehide', () => { stopText(); detectionController?.abort(); probeController?.abort(); });
   async function refreshCache() { try { const info = await chrome.runtime.sendMessage({ action: 'CACHE_INFO' }); $('cache-info').textContent = `${info.count} ${t('条段落')} · ${(info.bytes / 1024 / 1024).toFixed(2)} MB${info.writeFailed ? ` · ${t('本地写入失败')}` : ''}`; } catch {} }
   $('clear-cache').addEventListener('click', async () => { const response = await chrome.runtime.sendMessage({ action: 'CLEAR_CACHE' }); if (response.error) feedback(response.error); else refreshCache(); });
   function newer(a, b) { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) { if (x[i] !== y[i]) return x[i] > y[i]; } return false; }
@@ -212,7 +244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   $('check-update-btn').addEventListener('click', async () => { if (update) { await chrome.tabs.create({ url: update.downloadUrl }); feedback(t('解压下载文件后，请在扩展管理页重新加载。'), true); } else checkUpdate(); });
   $('copy-qq').addEventListener('click', async () => { try { await navigator.clipboard.writeText('376556413'); feedback(t('已复制'), true); } catch { feedback(t('复制失败，请手动选择文字。')); } });
-  loadProvider(); renderLocale(); busyText(false);
+  loadProvider(); renderLocale(); busyText(false); void checkWorker();
   try {
     [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.url && /^https?:/.test(tab.url)) { domain = new URL(tab.url).hostname; $('current-host').textContent = domain; $('auto-translate-site').checked = (settings.autoSites || []).includes(domain); const state = await chrome.tabs.sendMessage(tab.id, { action: 'GET_STATE' }); translatingPage = !!state?.isTranslating; renderPageButton(); }

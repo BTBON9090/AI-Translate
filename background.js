@@ -1,4 +1,4 @@
-importScripts('providers.js', 'protocol.js');
+importScripts('providers.js', 'protocol.js', 'connection.js');
 
 const PROVIDER_DEFAULTS = AI_TRANSLATE_PROVIDER_CATALOG.providers;
 const DEFAULT_PROVIDER = AI_TRANSLATE_PROVIDER_CATALOG.defaultProvider;
@@ -30,7 +30,7 @@ const cacheReady = (async () => {
   await chrome.storage.local.remove(stale);
 })().catch(() => { cacheWriteFailed = true; });
 // Content scripts only need preferences, never API credentials or the translation cache.
-chrome.storage.local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
+try { Promise.resolve(chrome.storage.local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' })).catch(() => {}); } catch {}
 
 function trimCache() {
   const removed = [];
@@ -266,29 +266,9 @@ function buildSystemPrompt(lang, mode, isBatch, context = '') {
   return rules.join('\n');
 }
 
-async function discoverModels(settings) {
-  const config = resolveEndpoint(settings, settings.provider, false);
-  const defaults = PROVIDER_DEFAULTS[config.provider] || {};
-  if (defaults.isBuiltin) return { models: defaults.commonModels, source: 'builtin' };
-  const official = defaults.url && AITranslateProtocol.modelsUrl(config.apiUrl, config.protocol) === AITranslateProtocol.modelsUrl(defaults.url, defaults.protocol || 'openai');
-  const url = new URL(official && defaults.modelsUrl ? defaults.modelsUrl : AITranslateProtocol.modelsUrl(config.apiUrl, config.protocol));
-  const models = new Set();
-  for (let page = 0; page < 20; page++) {
-    const response = await fetch(url.href, { headers: AITranslateProtocol.headers(config.apiKey, config.protocol), credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(`HTTP ${response.status}${[404, 405].includes(response.status) ? ' · Model discovery unsupported; enter an ID manually / 接口不支持模型列表，请手动填写 ID' : ' · Check URL and API key / 请检查地址和 Key'}`);
-    const raw = await response.text();
-    if (raw.length > 2 * 1024 * 1024) throw new Error('Model list too large / 模型列表过大');
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data.data)) throw new Error('Invalid model list / 无效的模型列表');
-    data.data.forEach(m => { if (typeof m.id === 'string' && m.id.length < 300) models.add(m.id); });
-    if (!data.has_more || !data.last_id) break;
-    if (url.searchParams.get('after_id') === data.last_id) break;
-    url.searchParams.set('after_id', data.last_id); url.searchParams.set('limit', '1000');
-  }
-  if (!models.size) throw new Error('No accessible models returned / 接口未返回可访问的模型');
-  return { models: [...models].sort(), source: 'api' };
-}
+async function discoverModels(settings) { return AITranslateConnection.discover(settings); }
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
+  if (msg.action === 'BACKGROUND_STATUS') { respond({ version: chrome.runtime.getManifest().version, connectionVersion: 1 }); return; }
   if (msg.action === 'GET_SETTINGS') {
     const allowed = ['targetLang', 'bilingualMode', 'transStyle', 'precisionMode', 'showBubble', 'autoSites', 'uiLang', 'modelName', 'provider', 'bubblePosition'];
     chrome.storage.local.get(allowed).then(respond, () => respond({})); return true;
